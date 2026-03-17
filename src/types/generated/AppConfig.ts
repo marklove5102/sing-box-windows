@@ -2,6 +2,7 @@ export interface AppConfig {
   auto_start_kernel: boolean
   auto_start_app: boolean
   prefer_ipv6: boolean
+  allow_lan_access: boolean
   proxy_port: number
   api_port: number
   proxy_mode: string

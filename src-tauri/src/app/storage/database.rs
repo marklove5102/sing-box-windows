@@ -53,6 +53,7 @@ impl DatabaseService {
                 auto_start_kernel BOOLEAN DEFAULT FALSE,
                 auto_start_app BOOLEAN DEFAULT FALSE,
                 prefer_ipv6 BOOLEAN DEFAULT FALSE,
+                allow_lan_access BOOLEAN DEFAULT FALSE,
                 proxy_port INTEGER DEFAULT 12080,
                 api_port INTEGER DEFAULT 12081,
                 proxy_mode TEXT DEFAULT 'manual',
@@ -95,6 +96,7 @@ impl DatabaseService {
         // 检查并添加 legacy 缺失字段（升级兼容）
         let alter_statements = [
             "ALTER TABLE app_config ADD COLUMN auto_start_app BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE app_config ADD COLUMN allow_lan_access BOOLEAN DEFAULT FALSE",
             "ALTER TABLE app_config ADD COLUMN system_proxy_bypass TEXT DEFAULT 'localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*'",
             "ALTER TABLE app_config ADD COLUMN tun_auto_route BOOLEAN DEFAULT TRUE",
             "ALTER TABLE app_config ADD COLUMN tun_strict_route BOOLEAN DEFAULT TRUE",
@@ -243,6 +245,9 @@ impl DatabaseService {
                 auto_start_kernel: row.get("auto_start_kernel"),
                 auto_start_app: row.get("auto_start_app"),
                 prefer_ipv6: row.get("prefer_ipv6"),
+                allow_lan_access: row
+                    .try_get("allow_lan_access")
+                    .unwrap_or(default_config.allow_lan_access),
                 proxy_port: row.get("proxy_port"),
                 api_port: row.get("api_port"),
                 proxy_mode: row.get("proxy_mode"),
@@ -332,13 +337,14 @@ impl DatabaseService {
         sqlx::query(
             r#"
             INSERT OR REPLACE INTO app_config
-            (id, auto_start_kernel, auto_start_app, prefer_ipv6, proxy_port, api_port, proxy_mode, system_proxy_enabled, tun_enabled, tray_instance_id, system_proxy_bypass, tun_auto_route, tun_strict_route, tun_mtu, tun_ipv4, tun_ipv6, tun_stack, tun_enable_ipv6, active_config_path, installed_kernel_version, singbox_dns_proxy, singbox_dns_cn, singbox_dns_resolver, singbox_urltest_url, singbox_default_proxy_outbound, singbox_block_ads, singbox_download_detour, singbox_dns_hijack, singbox_fake_dns_enabled, singbox_fake_dns_ipv4_range, singbox_fake_dns_ipv6_range, singbox_fake_dns_filter_mode, singbox_enable_app_groups, tun_self_heal_enabled, tun_self_heal_cooldown_secs, updated_at)
-            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, auto_start_kernel, auto_start_app, prefer_ipv6, allow_lan_access, proxy_port, api_port, proxy_mode, system_proxy_enabled, tun_enabled, tray_instance_id, system_proxy_bypass, tun_auto_route, tun_strict_route, tun_mtu, tun_ipv4, tun_ipv6, tun_stack, tun_enable_ipv6, active_config_path, installed_kernel_version, singbox_dns_proxy, singbox_dns_cn, singbox_dns_resolver, singbox_urltest_url, singbox_default_proxy_outbound, singbox_block_ads, singbox_download_detour, singbox_dns_hijack, singbox_fake_dns_enabled, singbox_fake_dns_ipv4_range, singbox_fake_dns_ipv6_range, singbox_fake_dns_filter_mode, singbox_enable_app_groups, tun_self_heal_enabled, tun_self_heal_cooldown_secs, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(config.auto_start_kernel)
         .bind(config.auto_start_app)
         .bind(config.prefer_ipv6)
+        .bind(config.allow_lan_access)
         .bind(config.proxy_port)
         .bind(config.api_port)
         .bind(&config.proxy_mode)
