@@ -1,4 +1,5 @@
 pub mod commands;
+mod icon;
 mod model;
 mod service;
 mod state;

@@ -1,3 +1,4 @@
+use super::icon;
 use super::model::{
     events, menu_ids, TrayNavigatePayload, TrayProxyMode, TrayRuntimeStateInput,
     TraySwitchProxyModePayload, TRAY_ICON_ID,
@@ -160,6 +161,21 @@ fn compose_tooltip(state: &TrayRuntimeState, text: &TrayText) -> String {
     tooltip
 }
 
+fn resolve_tray_icon<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &TrayRuntimeState,
+) -> Option<tauri::image::Image<'static>> {
+    if let Some(icon) = app.default_window_icon() {
+        if let Some(recolored) = icon::recolor_icon_for_mode(icon, state.proxy_mode) {
+            return Some(recolored);
+        }
+
+        return Some(icon.clone().to_owned());
+    }
+
+    None
+}
+
 fn build_tray_menu<R: Runtime>(
     app: &AppHandle<R>,
     state: &TrayRuntimeState,
@@ -307,6 +323,7 @@ fn create_or_replace_tray_icon<R: Runtime>(
     let text = tray_text_for_locale(&state.locale);
     let menu = build_tray_menu(app, state, &text)?;
     let tooltip = compose_tooltip(state, &text);
+    let icon = resolve_tray_icon(app, state);
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ICON_ID)
         .menu(&menu)
@@ -320,7 +337,7 @@ fn create_or_replace_tray_icon<R: Runtime>(
             handle_tray_icon_event(tray, event);
         });
 
-    if let Some(icon) = app.default_window_icon().cloned() {
+    if let Some(icon) = icon {
         builder = builder.icon(icon);
     }
 
@@ -340,6 +357,7 @@ pub fn refresh_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let text = tray_text_for_locale(&state.locale);
     let menu = build_tray_menu(app, &state, &text)?;
     let tooltip = compose_tooltip(&state, &text);
+    let icon = resolve_tray_icon(app, &state);
 
     if let Some(tray) = app.tray_by_id(TRAY_ICON_ID) {
         if let Err(err) = tray.set_menu(Some(menu)) {
@@ -348,6 +366,10 @@ pub fn refresh_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         }
         if let Err(err) = tray.set_tooltip(Some(tooltip.as_str())) {
             debug!("更新托盘提示失败（可忽略的平台差异）: {}", err);
+        }
+        if let Err(err) = tray.set_icon(icon) {
+            warn!("更新托盘图标失败，尝试重建托盘: {}", err);
+            return create_or_replace_tray_icon(app, &state);
         }
         return Ok(());
     }
