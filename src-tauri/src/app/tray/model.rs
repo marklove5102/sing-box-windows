@@ -11,7 +11,6 @@ pub mod menu_ids {
     pub const PROXY_CURRENT: &str = "tray_proxy_current";
     pub const PROXY_SYSTEM: &str = "tray_proxy_system";
     pub const PROXY_TUN: &str = "tray_proxy_tun";
-    pub const PROXY_MANUAL: &str = "tray_proxy_manual";
     pub const QUIT: &str = "tray_quit";
 }
 
@@ -33,29 +32,12 @@ pub enum TrayProxyMode {
     Manual,
 }
 
-impl TrayProxyMode {
-    pub fn from_raw(value: &str) -> Self {
-        match value {
-            "system" => Self::System,
-            "tun" => Self::Tun,
-            _ => Self::Manual,
-        }
-    }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::System => "system",
-            Self::Tun => "tun",
-            Self::Manual => "manual",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct TrayRuntimeStateInput {
     pub kernel_running: bool,
-    pub proxy_mode: String,
+    pub system_proxy_enabled: bool,
+    pub tun_enabled: bool,
     pub active_subscription_name: Option<String>,
     pub locale: String,
     pub window_visible: bool,
@@ -65,7 +47,8 @@ impl Default for TrayRuntimeStateInput {
     fn default() -> Self {
         Self {
             kernel_running: false,
-            proxy_mode: "manual".to_string(),
+            system_proxy_enabled: false,
+            tun_enabled: false,
             active_subscription_name: None,
             locale: "en-US".to_string(),
             window_visible: true,
@@ -81,6 +64,7 @@ pub struct TrayNavigatePayload {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TraySwitchProxyModePayload {
-    pub mode: String,
+pub struct TrayToggleProxyFeaturePayload {
+    pub feature: String,
+    pub enabled: bool,
 }

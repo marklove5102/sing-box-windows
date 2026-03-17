@@ -161,9 +161,12 @@ export const useKernelStore = defineStore('kernel', () => {
     }
   }
 
-  const applyProxySettings = async () => {
+  const applyProxySettings = async (options?: {
+    system_proxy_enabled?: boolean
+    tun_enabled?: boolean
+  }) => {
     try {
-      const result = await kernelService.applyProxySettings()
+      const result = await kernelService.applyProxySettings(options)
       if (!result.success) {
         lastError.value = result.message
         return false
@@ -214,7 +217,8 @@ export const useKernelStore = defineStore('kernel', () => {
       latestAvailableVersion.value = normalizeKernelVersion(latest)
       return latestAvailableVersion.value
     } catch (error) {
-      lastError.value = error instanceof Error ? error.message : 'Failed to fetch latest kernel version'
+      lastError.value =
+        error instanceof Error ? error.message : 'Failed to fetch latest kernel version'
       return ''
     }
   }
@@ -225,7 +229,8 @@ export const useKernelStore = defineStore('kernel', () => {
       availableVersions.value = versions.map((v) => normalizeKernelVersion(v))
       return availableVersions.value
     } catch (error) {
-      lastError.value = error instanceof Error ? error.message : 'Failed to fetch kernel version list'
+      lastError.value =
+        error instanceof Error ? error.message : 'Failed to fetch kernel version list'
       return []
     }
   }

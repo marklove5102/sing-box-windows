@@ -110,6 +110,7 @@ export interface TrayNavigatePayload {
   path: string
 }
 
-export interface TraySwitchProxyModePayload {
-  mode: 'system' | 'tun' | 'manual'
+export interface TrayToggleProxyFeaturePayload {
+  feature: 'systemProxy' | 'tun'
+  enabled: boolean
 }

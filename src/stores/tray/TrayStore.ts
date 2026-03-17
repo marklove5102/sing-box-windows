@@ -8,15 +8,23 @@ import { eventService } from '@/services/event-service'
 import { trayService, type TrayRuntimeStatePayload } from '@/services/tray-service'
 import { systemService } from '@/services/system-service'
 import { sudoService } from '@/services/sudo-service'
-import type { TrayNavigatePayload, TraySwitchProxyModePayload } from '@/types/events'
+import type { TrayNavigatePayload, TrayToggleProxyFeaturePayload } from '@/types/events'
 import { useAppStore, useKernelStore, useLocaleStore, useSubStore, useSudoStore } from '@/stores'
 import { useWindowStore } from '@/stores/app/WindowStore'
-import type { ProxyMode } from '@/stores/app/AppStore'
 
 const TRAY_SYNC_DEBOUNCE_MS = 150
 
-const isProxyMode = (value: unknown): value is ProxyMode =>
-  value === 'system' || value === 'tun' || value === 'manual'
+const isTrayTogglePayload = (value: unknown): value is TrayToggleProxyFeaturePayload => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const payload = value as Partial<TrayToggleProxyFeaturePayload>
+  return (
+    (payload.feature === 'systemProxy' || payload.feature === 'tun') &&
+    typeof payload.enabled === 'boolean'
+  )
+}
 
 export const useTrayStore = defineStore('tray', () => {
   const appStore = useAppStore()
@@ -78,7 +86,8 @@ export const useTrayStore = defineStore('tray', () => {
 
     return {
       kernelRunning: appStore.isRunning,
-      proxyMode: appStore.proxyMode as ProxyMode,
+      systemProxyEnabled: appStore.systemProxyEnabled,
+      tunEnabled: appStore.tunEnabled,
       activeSubscriptionName,
       locale: localeStore.currentLocale || i18n.global.locale.value || 'en-US',
       windowVisible: windowStore.windowState.isVisible,
@@ -138,7 +147,8 @@ export const useTrayStore = defineStore('tray', () => {
     const targetPath =
       preferredPath && preferredPath !== '/blank'
         ? preferredPath
-        : windowStore.windowState.lastVisiblePath && windowStore.windowState.lastVisiblePath !== '/blank'
+        : windowStore.windowState.lastVisiblePath &&
+            windowStore.windowState.lastVisiblePath !== '/blank'
           ? windowStore.windowState.lastVisiblePath
           : '/'
 
@@ -158,150 +168,192 @@ export const useTrayStore = defineStore('tray', () => {
     }
   }
 
-  // 复用原先托盘代理切换逻辑，避免 TUN 提权行为回归
-  const switchProxyModeFromTray = async (targetMode: ProxyMode) => {
-    const previousMode = appStore.proxyMode as ProxyMode
-    if (previousMode === targetMode) {
-      return
-    }
-
-    if (targetMode === 'tun') {
-      const platform = await systemService.getPlatformInfo().catch(() => 'unknown')
-
-      if (platform === 'windows') {
-        const isAdmin = await systemService.checkAdmin()
-        if (!isAdmin) {
-          try {
-            await appStore.toggleTun(true)
-            await appStore.saveToBackend()
-
-            if (appStore.isRunning) {
-              await kernelStore.stopKernel({ force: true })
-            }
-            await systemService.restartAsAdmin()
-            return
-          } catch (error) {
-            console.error('以管理员身份重启以启用TUN失败:', error)
-            await appStore.toggleTun(false)
-            scheduleSync(true)
-            return
-          }
-        } else {
-          try {
-            await appStore.toggleTun(true)
-            await appStore.toggleSystemProxy(false)
-
-            const applied = await kernelStore.applyProxySettings()
-            if (!applied) throw new Error(kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'))
-
-            const success = await kernelStore.restartKernel()
-            if (!success) {
-              throw new Error(kernelStore.lastError || i18n.global.t('notification.kernelRestartFailed'))
-            }
-          } catch (error) {
-            console.error('启用TUN模式失败:', error)
-            await appStore.toggleTun(false)
-            scheduleSync(true)
-          }
-          return
-        }
-      }
-
-      if (platform === 'linux' || platform === 'macos') {
-        const parseSudoCode = (raw: unknown) => {
-          const msg = raw instanceof Error ? raw.message : String(raw || '')
-          if (msg.includes('SUDO_PASSWORD_REQUIRED')) return 'required'
-          if (msg.includes('SUDO_PASSWORD_INVALID')) return 'invalid'
-          return null
-        }
-
-        try {
-          const status = await sudoService.getStatus()
-          if (!status.supported) {
-            appStore.showErrorMessage?.(i18n.global.t('home.sudoPassword.unsupported'))
-            scheduleSync(true)
-            return
-          }
-
-          if (!status.has_saved) {
-            await windowStore.showWindow()
-            await router.push('/').catch(() => {})
-            const ok = await useSudoStore().requestPassword()
-            if (!ok) {
-              scheduleSync(true)
-              return
-            }
-          }
-
-          await appStore.toggleTun(true)
-          await appStore.toggleSystemProxy(false)
-
-          const applied = await kernelStore.applyProxySettings()
-          if (!applied) throw new Error(kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'))
-
-          let success = await kernelStore.restartKernel()
-          if (!success) {
-            const code = parseSudoCode(kernelStore.lastError)
-            if (code === 'required' || code === 'invalid') {
-              appStore.showWarningMessage?.(
-                code === 'invalid'
-                  ? i18n.global.t('home.sudoPassword.invalid')
-                  : i18n.global.t('home.sudoPassword.required'),
-              )
-
-              await windowStore.showWindow()
-              await router.push('/').catch(() => {})
-              const ok = await useSudoStore().requestPassword()
-              if (ok) {
-                const appliedRetry = await kernelStore.applyProxySettings()
-                if (!appliedRetry) throw new Error(kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'))
-                success = await kernelStore.restartKernel()
-              }
-            }
-          }
-
-          if (!success) {
-            throw new Error(kernelStore.lastError || i18n.global.t('notification.kernelRestartFailed'))
-          }
-        } catch (error) {
-          console.error('启用TUN模式失败:', error)
-          await appStore.toggleTun(false)
-          scheduleSync(true)
-        }
-        return
-      }
-
-      appStore.showErrorMessage?.(i18n.global.t('home.sudoPassword.unsupported'))
-      scheduleSync(true)
+  const applySystemProxyToggleFromTray = async (enabled: boolean) => {
+    const previousSystemProxyEnabled = appStore.systemProxyEnabled
+    if (previousSystemProxyEnabled === enabled) {
       return
     }
 
     try {
-      if (targetMode === 'system') {
-        await appStore.toggleSystemProxy(true)
-        await appStore.toggleTun(false)
-      } else if (targetMode === 'manual') {
-        await appStore.toggleSystemProxy(false)
-        await appStore.toggleTun(false)
-      }
+      await appStore.toggleSystemProxy(enabled)
 
-      const success = await kernelStore.switchProxyMode(targetMode)
+      const success = await kernelStore.applyProxySettings({
+        system_proxy_enabled: enabled,
+      })
       if (!success) {
-        throw new Error(kernelStore.lastError || i18n.global.t('notification.proxySwitchFailed'))
+        throw new Error(kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'))
       }
     } catch (error) {
-      console.error('托盘切换代理模式失败:', error)
-      if (previousMode === 'tun') {
-        await appStore.toggleTun(true)
-      } else if (previousMode === 'system') {
-        await appStore.toggleSystemProxy(true)
-      } else {
-        await appStore.toggleSystemProxy(false)
-        await appStore.toggleTun(false)
-      }
+      console.error('托盘切换系统代理失败:', error)
+      await appStore.toggleSystemProxy(previousSystemProxyEnabled)
     } finally {
       scheduleSync(true)
     }
+  }
+
+  const applyTunToggleFromTray = async (enabled: boolean) => {
+    const previousTunEnabled = appStore.tunEnabled
+    if (previousTunEnabled === enabled) {
+      return
+    }
+
+    const platform = await systemService.getPlatformInfo().catch(() => 'unknown')
+    const parseSudoCode = (raw: unknown) => {
+      const msg = raw instanceof Error ? raw.message : String(raw || '')
+      if (msg.includes('SUDO_PASSWORD_REQUIRED')) return 'required'
+      if (msg.includes('SUDO_PASSWORD_INVALID')) return 'invalid'
+      return null
+    }
+
+    if (!enabled) {
+      try {
+        await appStore.toggleTun(false)
+
+        const applied = await kernelStore.applyProxySettings({
+          tun_enabled: false,
+        })
+        if (!applied) {
+          throw new Error(kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'))
+        }
+
+        const success = await kernelStore.restartKernel()
+        if (!success) {
+          throw new Error(
+            kernelStore.lastError || i18n.global.t('notification.kernelRestartFailed'),
+          )
+        }
+      } catch (error) {
+        console.error('托盘关闭TUN失败:', error)
+        await appStore.toggleTun(previousTunEnabled)
+      } finally {
+        scheduleSync(true)
+      }
+      return
+    }
+
+    if (platform === 'windows') {
+      const isAdmin = await systemService.checkAdmin()
+      if (!isAdmin) {
+        try {
+          await appStore.toggleTun(true)
+          await appStore.saveToBackend()
+
+          if (appStore.isRunning) {
+            await kernelStore.stopKernel({ force: true })
+          }
+          await systemService.restartAsAdmin()
+          return
+        } catch (error) {
+          console.error('以管理员身份重启以启用TUN失败:', error)
+          await appStore.toggleTun(previousTunEnabled)
+          scheduleSync(true)
+          return
+        }
+      }
+
+      try {
+        await appStore.toggleTun(true)
+
+        const applied = await kernelStore.applyProxySettings({
+          tun_enabled: true,
+        })
+        if (!applied) {
+          throw new Error(kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'))
+        }
+
+        const success = await kernelStore.restartKernel()
+        if (!success) {
+          throw new Error(
+            kernelStore.lastError || i18n.global.t('notification.kernelRestartFailed'),
+          )
+        }
+      } catch (error) {
+        console.error('启用TUN模式失败:', error)
+        await appStore.toggleTun(previousTunEnabled)
+        scheduleSync(true)
+      }
+      return
+    }
+
+    if (platform === 'linux' || platform === 'macos') {
+      try {
+        const status = await sudoService.getStatus()
+        if (!status.supported) {
+          appStore.showErrorMessage?.(i18n.global.t('home.sudoPassword.unsupported'))
+          scheduleSync(true)
+          return
+        }
+
+        if (!status.has_saved) {
+          await windowStore.showWindow()
+          await router.push('/').catch(() => {})
+          const ok = await useSudoStore().requestPassword()
+          if (!ok) {
+            scheduleSync(true)
+            return
+          }
+        }
+
+        await appStore.toggleTun(true)
+
+        const applied = await kernelStore.applyProxySettings({
+          tun_enabled: true,
+        })
+        if (!applied) {
+          throw new Error(kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'))
+        }
+
+        let success = await kernelStore.restartKernel()
+        if (!success) {
+          const code = parseSudoCode(kernelStore.lastError)
+          if (code === 'required' || code === 'invalid') {
+            appStore.showWarningMessage?.(
+              code === 'invalid'
+                ? i18n.global.t('home.sudoPassword.invalid')
+                : i18n.global.t('home.sudoPassword.required'),
+            )
+
+            await windowStore.showWindow()
+            await router.push('/').catch(() => {})
+            const ok = await useSudoStore().requestPassword()
+            if (ok) {
+              const appliedRetry = await kernelStore.applyProxySettings({
+                tun_enabled: true,
+              })
+              if (!appliedRetry) {
+                throw new Error(
+                  kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'),
+                )
+              }
+              success = await kernelStore.restartKernel()
+            }
+          }
+        }
+
+        if (!success) {
+          throw new Error(
+            kernelStore.lastError || i18n.global.t('notification.kernelRestartFailed'),
+          )
+        }
+      } catch (error) {
+        console.error('启用TUN模式失败:', error)
+        await appStore.toggleTun(previousTunEnabled)
+        scheduleSync(true)
+      }
+      return
+    }
+
+    appStore.showErrorMessage?.(i18n.global.t('home.sudoPassword.unsupported'))
+    scheduleSync(true)
+  }
+
+  const toggleProxyFeatureFromTray = async (payload: TrayToggleProxyFeaturePayload) => {
+    if (payload.feature === 'systemProxy') {
+      await applySystemProxyToggleFromTray(payload.enabled)
+      return
+    }
+
+    await applyTunToggleFromTray(payload.enabled)
   }
 
   const registerBackendEvents = async () => {
@@ -338,11 +390,11 @@ export const useTrayStore = defineStore('tray', () => {
 
     await register(
       APP_EVENTS.trayActionSwitchProxyMode,
-      async (payload: TraySwitchProxyModePayload) => {
-        if (!isProxyMode(payload?.mode)) {
+      async (payload: TrayToggleProxyFeaturePayload) => {
+        if (!isTrayTogglePayload(payload)) {
           return
         }
-        await switchProxyModeFromTray(payload.mode)
+        await toggleProxyFeatureFromTray(payload)
       },
     )
 
@@ -368,7 +420,7 @@ export const useTrayStore = defineStore('tray', () => {
     )
 
     registerWatcher(
-      () => appStore.proxyMode,
+      () => [appStore.systemProxyEnabled, appStore.tunEnabled],
       () => scheduleSync(false),
     )
 

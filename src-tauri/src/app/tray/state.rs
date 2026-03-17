@@ -3,7 +3,8 @@ use super::model::{TrayProxyMode, TrayRuntimeStateInput};
 #[derive(Debug, Clone)]
 pub struct TrayRuntimeState {
     pub kernel_running: bool,
-    pub proxy_mode: TrayProxyMode,
+    pub system_proxy_enabled: bool,
+    pub tun_enabled: bool,
     pub active_subscription_name: Option<String>,
     pub locale: String,
     pub window_visible: bool,
@@ -14,7 +15,8 @@ impl Default for TrayRuntimeState {
     fn default() -> Self {
         Self {
             kernel_running: false,
-            proxy_mode: TrayProxyMode::Manual,
+            system_proxy_enabled: false,
+            tun_enabled: false,
             active_subscription_name: None,
             locale: "en-US".to_string(),
             window_visible: true,
@@ -32,9 +34,13 @@ impl TrayRuntimeState {
             changed = true;
         }
 
-        let next_mode = TrayProxyMode::from_raw(payload.proxy_mode.trim());
-        if self.proxy_mode != next_mode {
-            self.proxy_mode = next_mode;
+        if self.system_proxy_enabled != payload.system_proxy_enabled {
+            self.system_proxy_enabled = payload.system_proxy_enabled;
+            changed = true;
+        }
+
+        if self.tun_enabled != payload.tun_enabled {
+            self.tun_enabled = payload.tun_enabled;
             changed = true;
         }
 
@@ -76,6 +82,16 @@ impl TrayRuntimeState {
         }
         self.window_visible = visible;
         true
+    }
+
+    pub fn display_mode(&self) -> TrayProxyMode {
+        if self.tun_enabled {
+            TrayProxyMode::Tun
+        } else if self.system_proxy_enabled {
+            TrayProxyMode::System
+        } else {
+            TrayProxyMode::Manual
+        }
     }
 }
 

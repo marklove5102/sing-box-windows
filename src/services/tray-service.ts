@@ -2,7 +2,8 @@ import { invokeWithAppContext } from './invoke-client'
 
 export interface TrayRuntimeStatePayload {
   kernelRunning: boolean
-  proxyMode: 'system' | 'tun' | 'manual'
+  systemProxyEnabled: boolean
+  tunEnabled: boolean
   activeSubscriptionName?: string | null
   locale: string
   windowVisible: boolean
@@ -11,7 +12,8 @@ export interface TrayRuntimeStatePayload {
 function sanitizeStatePayload(payload: TrayRuntimeStatePayload): TrayRuntimeStatePayload {
   return {
     kernelRunning: payload.kernelRunning,
-    proxyMode: payload.proxyMode,
+    systemProxyEnabled: payload.systemProxyEnabled,
+    tunEnabled: payload.tunEnabled,
     activeSubscriptionName: payload.activeSubscriptionName?.trim() || null,
     locale: payload.locale?.trim() || 'en-US',
     windowVisible: payload.windowVisible,

@@ -12,7 +12,7 @@ import type {
   KernelFailurePayload,
   KernelOperationFailedPayload,
   TrayNavigatePayload,
-  TraySwitchProxyModePayload,
+  TrayToggleProxyFeaturePayload,
 } from '@/types/events'
 
 export const APP_EVENTS = {
@@ -43,7 +43,7 @@ export const APP_EVENTS = {
   trayActionSwitchProxyMode: 'tray-action-switch-proxy-mode',
 } as const
 
-export type AppEventName = typeof APP_EVENTS[keyof typeof APP_EVENTS]
+export type AppEventName = (typeof APP_EVENTS)[keyof typeof APP_EVENTS]
 
 export type AppEventPayloads = {
   [APP_EVENTS.trafficData]: TrafficDataPayload
@@ -74,5 +74,5 @@ export type AppEventPayloads = {
   [APP_EVENTS.trayActionNavigateLastRoute]: TrayNavigatePayload
   [APP_EVENTS.trayActionExitRequested]: unknown
   [APP_EVENTS.trayActionRestartKernel]: unknown
-  [APP_EVENTS.trayActionSwitchProxyMode]: TraySwitchProxyModePayload
+  [APP_EVENTS.trayActionSwitchProxyMode]: TrayToggleProxyFeaturePayload
 }

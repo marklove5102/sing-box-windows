@@ -1,7 +1,7 @@
 use super::icon;
 use super::model::{
-    events, menu_ids, TrayNavigatePayload, TrayProxyMode, TrayRuntimeStateInput,
-    TraySwitchProxyModePayload, TRAY_ICON_ID,
+    events, menu_ids, TrayNavigatePayload, TrayRuntimeStateInput, TrayToggleProxyFeaturePayload,
+    TRAY_ICON_ID,
 };
 use super::state::TrayRuntimeState;
 use lazy_static::lazy_static;
@@ -24,8 +24,8 @@ struct TrayText {
     restart_kernel: &'static str,
     status_running: &'static str,
     status_stopped: &'static str,
-    switch_proxy_mode: &'static str,
-    current_mode: &'static str,
+    proxy_controls: &'static str,
+    current_status: &'static str,
     mode_system: &'static str,
     mode_tun: &'static str,
     mode_manual: &'static str,
@@ -41,8 +41,8 @@ const TRAY_TEXT_ZH_CN: TrayText = TrayText {
     restart_kernel: "重启内核",
     status_running: "运行中",
     status_stopped: "已停止",
-    switch_proxy_mode: "切换代理模式",
-    current_mode: "当前模式：",
+    proxy_controls: "代理开关",
+    current_status: "当前状态：",
     mode_system: "系统代理",
     mode_tun: "TUN 模式",
     mode_manual: "手动模式",
@@ -58,8 +58,8 @@ const TRAY_TEXT_EN_US: TrayText = TrayText {
     restart_kernel: "Restart Kernel",
     status_running: "Running",
     status_stopped: "Stopped",
-    switch_proxy_mode: "Switch Proxy Mode",
-    current_mode: "Current Mode:",
+    proxy_controls: "Proxy Controls",
+    current_status: "Current Status:",
     mode_system: "System",
     mode_tun: "TUN",
     mode_manual: "Manual",
@@ -75,8 +75,8 @@ const TRAY_TEXT_JA_JP: TrayText = TrayText {
     restart_kernel: "カーネルを再起動",
     status_running: "稼働中",
     status_stopped: "停止中",
-    switch_proxy_mode: "プロキシモード切替",
-    current_mode: "現在のモード：",
+    proxy_controls: "プロキシ切替",
+    current_status: "現在の状態：",
     mode_system: "システム",
     mode_tun: "TUN",
     mode_manual: "手動",
@@ -92,8 +92,8 @@ const TRAY_TEXT_RU_RU: TrayText = TrayText {
     restart_kernel: "Перезапустить ядро",
     status_running: "Запущено",
     status_stopped: "Остановлено",
-    switch_proxy_mode: "Режим прокси",
-    current_mode: "Текущий режим:",
+    proxy_controls: "Прокси-переключатели",
+    current_status: "Текущее состояние:",
     mode_system: "Системный",
     mode_tun: "TUN",
     mode_manual: "Ручной",
@@ -130,11 +130,12 @@ fn tray_text_for_locale(locale: &str) -> TrayText {
     }
 }
 
-fn mode_text(mode: TrayProxyMode, text: &TrayText) -> &'static str {
-    match mode {
-        TrayProxyMode::System => text.mode_system,
-        TrayProxyMode::Tun => text.mode_tun,
-        TrayProxyMode::Manual => text.mode_manual,
+fn mode_summary_text(state: &TrayRuntimeState, text: &TrayText) -> String {
+    match (state.system_proxy_enabled, state.tun_enabled) {
+        (true, true) => format!("{} + {}", text.mode_system, text.mode_tun),
+        (true, false) => text.mode_system.to_string(),
+        (false, true) => text.mode_tun.to_string(),
+        (false, false) => text.mode_manual.to_string(),
     }
 }
 
@@ -144,7 +145,7 @@ fn compose_tooltip(state: &TrayRuntimeState, text: &TrayText) -> String {
     } else {
         text.status_stopped
     };
-    let mode = mode_text(state.proxy_mode, text);
+    let mode = mode_summary_text(state, text);
 
     let mut tooltip = format!(
         "sing-box-window - {}{}, {}{}",
@@ -166,7 +167,7 @@ fn resolve_tray_icon<R: Runtime>(
     state: &TrayRuntimeState,
 ) -> Option<tauri::image::Image<'static>> {
     if let Some(icon) = app.default_window_icon() {
-        if let Some(recolored) = icon::recolor_icon_for_mode(icon, state.proxy_mode) {
+        if let Some(recolored) = icon::recolor_icon_for_mode(icon, state.display_mode()) {
             return Some(recolored);
         }
 
@@ -211,41 +212,30 @@ fn build_tray_menu<R: Runtime>(
 
     let current_mode_item = MenuItemBuilder::with_id(
         menu_ids::PROXY_CURRENT,
-        format!(
-            "{} {}",
-            text.current_mode,
-            mode_text(state.proxy_mode, text)
-        ),
+        format!("{} {}", text.current_status, mode_summary_text(state, text)),
     )
     .enabled(false)
     .build(app)
     .map_err(|e| format!("创建当前模式菜单项失败: {}", e))?;
 
     let proxy_system_item = CheckMenuItemBuilder::with_id(menu_ids::PROXY_SYSTEM, text.mode_system)
-        .checked(state.proxy_mode == TrayProxyMode::System)
-        .enabled(state.proxy_mode != TrayProxyMode::System)
+        .checked(state.system_proxy_enabled)
+        .enabled(true)
         .build(app)
         .map_err(|e| format!("创建系统代理菜单项失败: {}", e))?;
 
     let proxy_tun_item = CheckMenuItemBuilder::with_id(menu_ids::PROXY_TUN, text.mode_tun)
-        .checked(state.proxy_mode == TrayProxyMode::Tun)
-        .enabled(state.proxy_mode != TrayProxyMode::Tun)
+        .checked(state.tun_enabled)
+        .enabled(true)
         .build(app)
         .map_err(|e| format!("创建TUN菜单项失败: {}", e))?;
 
-    let proxy_manual_item = CheckMenuItemBuilder::with_id(menu_ids::PROXY_MANUAL, text.mode_manual)
-        .checked(state.proxy_mode == TrayProxyMode::Manual)
-        .enabled(state.proxy_mode != TrayProxyMode::Manual)
-        .build(app)
-        .map_err(|e| format!("创建手动代理菜单项失败: {}", e))?;
-
     let proxy_submenu =
-        SubmenuBuilder::with_id(app, menu_ids::PROXY_SUBMENU, text.switch_proxy_mode)
+        SubmenuBuilder::with_id(app, menu_ids::PROXY_SUBMENU, text.proxy_controls)
             .item(&current_mode_item)
             .separator()
             .item(&proxy_system_item)
             .item(&proxy_tun_item)
-            .item(&proxy_manual_item)
             .build()
             .map_err(|e| format!("创建代理模式子菜单失败: {}", e))?;
 
@@ -264,9 +254,14 @@ fn build_tray_menu<R: Runtime>(
         .map_err(|e| format!("创建托盘菜单失败: {}", e))
 }
 
-fn handle_proxy_switch_menu_event<R: Runtime>(app: &AppHandle<R>, mode: TrayProxyMode) {
-    let payload = TraySwitchProxyModePayload {
-        mode: mode.as_str().to_string(),
+fn handle_proxy_toggle_menu_event<R: Runtime>(
+    app: &AppHandle<R>,
+    feature: &str,
+    enabled: bool,
+) {
+    let payload = TrayToggleProxyFeaturePayload {
+        feature: feature.to_string(),
+        enabled,
     };
     if let Err(err) = app.emit(events::ACTION_SWITCH_PROXY_MODE, payload) {
         warn!("发送托盘代理切换事件失败: {}", err);
@@ -285,9 +280,14 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
                 warn!("发送重启内核事件失败: {}", err);
             }
         }
-        menu_ids::PROXY_SYSTEM => handle_proxy_switch_menu_event(app, TrayProxyMode::System),
-        menu_ids::PROXY_TUN => handle_proxy_switch_menu_event(app, TrayProxyMode::Tun),
-        menu_ids::PROXY_MANUAL => handle_proxy_switch_menu_event(app, TrayProxyMode::Manual),
+        menu_ids::PROXY_SYSTEM => {
+            let enabled = with_state_read(|state| !state.system_proxy_enabled);
+            handle_proxy_toggle_menu_event(app, "systemProxy", enabled)
+        }
+        menu_ids::PROXY_TUN => {
+            let enabled = with_state_read(|state| !state.tun_enabled);
+            handle_proxy_toggle_menu_event(app, "tun", enabled)
+        }
         menu_ids::QUIT => {
             if let Err(err) = request_app_exit(app) {
                 warn!("托盘退出流程失败: {}", err);
