@@ -174,6 +174,7 @@ pub async fn resolve_proxy_runtime_state(
 
     let proxy_state = ProxyRuntimeState {
         proxy_port: app_config.proxy_port,
+        allow_lan_access: app_config.allow_lan_access,
         system_proxy_enabled: app_config.system_proxy_enabled,
         tun_enabled: app_config.tun_enabled,
         system_proxy_bypass: overrides

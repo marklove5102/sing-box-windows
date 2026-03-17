@@ -10,6 +10,14 @@ use crate::app::core::tun_profile::TUN_ROUTE_EXCLUDES;
 use crate::app::storage::state_model::AppConfig;
 use serde_json::{json, Map, Value};
 
+fn proxy_listen_address(app_config: &AppConfig) -> &'static str {
+    if app_config.allow_lan_access {
+        "0.0.0.0"
+    } else {
+        "127.0.0.1"
+    }
+}
+
 /// 将应用设置（端口 / System Proxy / TUN / IPv6 偏好等）同步到 sing-box 配置。
 ///
 /// 说明：
@@ -98,8 +106,15 @@ pub fn apply_port_settings_only(config: &mut Value, app_config: &AppConfig) {
                         inbound_obj.get("tag").and_then(|v| v.as_str()),
                         Some("mixed-in")
                     );
-                    if (is_mixed || is_mixed_in) && inbound_obj.contains_key("listen_port") {
-                        inbound_obj.insert("listen_port".to_string(), json!(app_config.proxy_port));
+                    if is_mixed || is_mixed_in {
+                        if inbound_obj.contains_key("listen_port") {
+                            inbound_obj
+                                .insert("listen_port".to_string(), json!(app_config.proxy_port));
+                        }
+                        inbound_obj.insert(
+                            "listen".to_string(),
+                            json!(proxy_listen_address(app_config)),
+                        );
                     }
                 }
             }
@@ -489,7 +504,7 @@ fn apply_inbounds_settings(config_obj: &mut Map<String, Value>, app_config: &App
     inbounds.push(json!({
         "type": "mixed",
         "tag": "mixed-in",
-        "listen": "127.0.0.1",
+        "listen": proxy_listen_address(app_config),
         "listen_port": app_config.proxy_port,
         "sniff": true,
         "set_system_proxy": app_config.system_proxy_enabled

@@ -43,6 +43,7 @@ fn managed_target_path_from_input(input: &str, default_name: Option<&str>) -> Pa
 pub fn runtime_state_from_config(app_config: &AppConfig) -> ProxyRuntimeState {
     ProxyRuntimeState {
         proxy_port: app_config.proxy_port,
+        allow_lan_access: app_config.allow_lan_access,
         system_proxy_enabled: app_config.system_proxy_enabled,
         tun_enabled: app_config.tun_enabled,
         system_proxy_bypass: app_config.system_proxy_bypass.clone(),

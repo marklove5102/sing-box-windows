@@ -16,6 +16,7 @@ use url::Url;
 #[derive(Debug, Clone)]
 pub struct ProxyRuntimeState {
     pub proxy_port: u16,
+    pub allow_lan_access: bool,
     pub system_proxy_enabled: bool,
     pub tun_enabled: bool,
     pub system_proxy_bypass: String,
@@ -34,12 +35,20 @@ impl ProxyRuntimeState {
     }
 }
 
+fn resolve_proxy_listen_address(state: &ProxyRuntimeState) -> &'static str {
+    if state.allow_lan_access {
+        network_config::DEFAULT_LISTEN_ADDRESS
+    } else {
+        network_config::DEFAULT_CLASH_API_ADDRESS
+    }
+}
+
 fn build_inbounds_for_state(state: &ProxyRuntimeState) -> Vec<config_model::Inbound> {
     if state.tun_enabled {
         let mut inbounds =
             TunProfile::from_options(&state.tun_options).to_inbounds(state.proxy_port);
         if let Some(mixed) = inbounds.get_mut(0) {
-            mixed.listen = Some(network_config::DEFAULT_CLASH_API_ADDRESS.to_string());
+            mixed.listen = Some(resolve_proxy_listen_address(state).to_string());
             mixed.set_system_proxy = Some(state.system_proxy_enabled);
         }
         return inbounds;
@@ -48,7 +57,7 @@ fn build_inbounds_for_state(state: &ProxyRuntimeState) -> Vec<config_model::Inbo
     vec![config_model::Inbound {
         r#type: config::DEFAULT_INBOUND_TYPE.to_string(),
         tag: config::DEFAULT_INBOUND_TAG.to_string(),
-        listen: Some(network_config::DEFAULT_CLASH_API_ADDRESS.to_string()),
+        listen: Some(resolve_proxy_listen_address(state).to_string()),
         interface_name: None,
         listen_port: Some(state.proxy_port),
         address: None,
@@ -66,6 +75,13 @@ fn build_inbounds_for_state(state: &ProxyRuntimeState) -> Vec<config_model::Inbo
 
 use crate::app::storage::enhanced_storage_service::db_get_app_config;
 use tauri::AppHandle;
+
+async fn load_allow_lan_access(app_handle: &AppHandle) -> bool {
+    db_get_app_config(app_handle.clone())
+        .await
+        .map(|config| config.allow_lan_access)
+        .unwrap_or(false)
+}
 
 pub async fn apply_proxy_runtime_state(
     app_handle: &AppHandle,
@@ -133,8 +149,10 @@ pub async fn set_system_proxy(
     port: u16,
     system_proxy_bypass: Option<String>,
 ) -> Result<(), String> {
+    let allow_lan_access = load_allow_lan_access(&app_handle).await;
     let runtime_state = ProxyRuntimeState {
         proxy_port: port,
+        allow_lan_access,
         system_proxy_enabled: true,
         tun_enabled: false,
         system_proxy_bypass: system_proxy_bypass.unwrap_or_else(|| DEFAULT_BYPASS_LIST.to_string()),
@@ -146,8 +164,10 @@ pub async fn set_system_proxy(
 // 设置手动代理模式（不自动设置系统代理）
 #[tauri::command]
 pub async fn set_manual_proxy(app_handle: AppHandle, port: u16) -> Result<(), String> {
+    let allow_lan_access = load_allow_lan_access(&app_handle).await;
     let runtime_state = ProxyRuntimeState {
         proxy_port: port,
+        allow_lan_access,
         system_proxy_enabled: false,
         tun_enabled: false,
         system_proxy_bypass: DEFAULT_BYPASS_LIST.to_string(),
@@ -163,8 +183,10 @@ pub async fn set_tun_proxy(
     port: u16,
     tun_options: Option<TunProxyOptions>,
 ) -> Result<(), String> {
+    let allow_lan_access = load_allow_lan_access(&app_handle).await;
     let runtime_state = ProxyRuntimeState {
         proxy_port: port,
+        allow_lan_access,
         system_proxy_enabled: false,
         tun_enabled: true,
         system_proxy_bypass: DEFAULT_BYPASS_LIST.to_string(),
