@@ -97,18 +97,6 @@ pub fn run() {
                 tracing::error!("初始化托盘失败: {}", err);
             }
 
-            if startup_context.should_start_lightweight {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                    if let Err(err) =
-                        crate::app::tray::enter_startup_background_mode(&app_handle, true)
-                    {
-                        tracing::warn!("开机自启轻量模式进入失败: {}", err);
-                    }
-                });
-            }
-
             // 启动日志目录定时清理
             if let Some(dir) = log_dir.clone() {
                 // 后台清理日志，不阻塞应用启动
@@ -122,6 +110,7 @@ pub fn run() {
 
             // 异步初始化数据库服务（单例）
             let app_handle = app.handle().clone();
+            let should_start_lightweight = startup_context.should_start_lightweight;
             let storage_cell_state = app.state::<Arc<OnceCell<Arc<EnhancedStorageService>>>>();
             let storage_cell = Arc::clone(&*storage_cell_state);
             tauri::async_runtime::spawn(async move {
@@ -136,6 +125,25 @@ pub fn run() {
                 }
 
                 tracing::info!("Enhanced storage service initialized successfully");
+
+                match crate::app::system::startup_restore_service::prepare_startup_restore(
+                    &app_handle,
+                )
+                .await
+                {
+                    Ok(Some(active_config_path)) => {
+                        tracing::info!(
+                            "启动恢复已确认生效配置路径: {}",
+                            active_config_path
+                        );
+                    }
+                    Ok(None) => {
+                        tracing::info!("启动恢复未解析到活动配置路径，将继续使用默认配置");
+                    }
+                    Err(err) => {
+                        tracing::warn!("启动恢复准备失败，将继续沿用现有配置: {}", err);
+                    }
+                }
 
                 // 启动时清理可能残留的内核进程，避免复用非本程序启动的内核实例。
                 if let Err(e) = crate::process::manager::ProcessManager::new()
@@ -166,6 +174,14 @@ pub fn run() {
                     &app_handle,
                 )
                 .await;
+
+                if should_start_lightweight {
+                    if let Err(err) =
+                        crate::app::tray::enter_startup_background_mode(&app_handle, true)
+                    {
+                        tracing::warn!("开机自启轻量模式进入失败: {}", err);
+                    }
+                }
             });
 
             Ok(())

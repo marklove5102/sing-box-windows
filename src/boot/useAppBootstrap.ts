@@ -182,7 +182,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps) {
     // 再回退到订阅 Store 的高亮项，避免出现“高亮与内核配置不一致”。
     const activeSub = subStore.getActiveSubscription()
     const desiredConfigPath = appStore.activeConfigPath || activeSub?.configPath || null
-    if (desiredConfigPath) {
+    if (desiredConfigPath && desiredConfigPath !== appStore.activeConfigPath) {
       await subscriptionService.setActiveConfig(desiredConfigPath)
     }
 
