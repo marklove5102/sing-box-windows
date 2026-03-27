@@ -117,11 +117,7 @@ export const useSubStore = defineStore(
 
     // 保存配置到数据库
     const saveToBackend = async () => {
-      try {
-        await DatabaseService.saveSubscriptions(convertToBackendFormat(list.value))
-      } catch {
-        // 保存失败时静默处理
-      }
+      await DatabaseService.saveSubscriptions(convertToBackendFormat(list.value))
     }
 
     const add = async (
@@ -166,12 +162,10 @@ export const useSubStore = defineStore(
     // 设置激活订阅
     const setActiveIndex = async (index: number | null) => {
       activeIndex.value = index
-      // 持久化激活索引到本地存储
-      try {
-        await DatabaseService.saveActiveIndex(index)
-      } catch {
-        // 保存失败时静默处理
-      }
+      // 后端在切换激活订阅时会读取“最新的订阅列表”来判断当前配置是否属于原始配置模式。
+      // 因此这里先持久化订阅列表，再写入激活索引，避免使用旧元数据误走 Full patch。
+      await saveToBackend()
+      await DatabaseService.saveActiveIndex(index)
     }
 
     // 重置所有订阅的加载状态
@@ -232,7 +226,7 @@ export const useSubStore = defineStore(
       async () => {
         // 初始化期间不保存
         if (isInitializing) return
-        await saveToBackend()
+        await saveToBackend().catch(() => undefined)
       },
       { deep: true },
     )

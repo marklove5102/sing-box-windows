@@ -509,10 +509,11 @@ const handleConfirm = () => {
         applySubscriptionUserinfo(newItem, savedResult, isManual)
 
         subStore.list.push(newItem)
+        await subStore.saveToBackend()
         await subStore.setActiveIndex(subStore.list.length - 1)
 
         if (savedPath) {
-          await subscriptionService.setActiveConfig(savedPath)
+          await subscriptionService.setActiveConfig(savedPath, { useOriginalConfig })
           await appStore.setActiveConfigPath(savedPath)
         }
 
@@ -540,6 +541,7 @@ const handleConfirm = () => {
         if (isManual) {
           applySubscriptionUserinfo(subStore.list[editIndex.value], null, true)
         }
+        await subStore.saveToBackend()
         message.success(t('sub.updateSuccess'))
       }
 
@@ -614,13 +616,17 @@ const refreshSubscription = async (index: number, applyRuntime = false, silent =
     if (savedPath) {
       subStore.list[index].configPath = savedPath
       subStore.list[index].backupPath = `${savedPath}.bak`
-      if (applyRuntime) {
-        await subscriptionService.setActiveConfig(savedPath)
-        await appStore.setActiveConfigPath(savedPath)
-      }
     }
     applySubscriptionUserinfo(subStore.list[index], savedResult, item.isManual)
     subStore.list[index].lastUpdate = Date.now()
+    await subStore.saveToBackend()
+
+    if (savedPath && applyRuntime) {
+      await subscriptionService.setActiveConfig(savedPath, {
+        useOriginalConfig: item.useOriginalConfig,
+      })
+      await appStore.setActiveConfigPath(savedPath)
+    }
 
     if (!silent) {
       message.success(applyRuntime ? t('sub.refreshAndApplied') : t('sub.refreshSuccess'))
@@ -648,7 +654,9 @@ const rollbackSubscription = async (index: number) => {
     await subscriptionService.rollbackConfig(item.configPath)
     message.success(t('sub.rollbackSuccess'))
     if (subStore.activeIndex === index) {
-      await subscriptionService.setActiveConfig(item.configPath)
+      await subscriptionService.setActiveConfig(item.configPath, {
+        useOriginalConfig: item.useOriginalConfig,
+      })
       await appStore.setActiveConfigPath(item.configPath)
       if (appStore.isRunning) {
         await kernelService.restartKernel()
@@ -683,7 +691,10 @@ const useSubscription = async (index: number) => {
     if (!item.configPath) {
       throw new Error(t('sub.missingConfigFile'))
     }
-    await subscriptionService.setActiveConfig(item.configPath)
+    await subStore.saveToBackend()
+    await subscriptionService.setActiveConfig(item.configPath, {
+      useOriginalConfig: item.useOriginalConfig,
+    })
     await appStore.setActiveConfigPath(item.configPath)
     await subStore.setActiveIndex(index)
     subStore.list[index].lastUpdate = Date.now()

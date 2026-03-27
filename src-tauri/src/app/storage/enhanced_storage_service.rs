@@ -12,6 +12,7 @@ use tokio::sync::OnceCell;
 const STARTUP_PREFERENCES_FILE: &str = "startup_preferences.json";
 
 /// 将全局设置同步到指定的配置文件
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ConfigPatchMode {
     Full,
     PortsOnly,
@@ -21,6 +22,18 @@ fn resolve_patch_mode_for_subscription(subscription: Option<&Subscription>) -> C
     match subscription {
         Some(sub) if sub.use_original_config => ConfigPatchMode::PortsOnly,
         _ => ConfigPatchMode::Full,
+    }
+}
+
+fn resolve_patch_mode_with_hint(
+    subscription: Option<&Subscription>,
+    use_original_config_hint: Option<bool>,
+) -> ConfigPatchMode {
+    match use_original_config_hint {
+        // 显式提示来自当前前端交互，优先级高于数据库里的历史记录，可避免异步落库时的误判。
+        Some(true) => ConfigPatchMode::PortsOnly,
+        Some(false) => ConfigPatchMode::Full,
+        None => resolve_patch_mode_for_subscription(subscription),
     }
 }
 
@@ -53,6 +66,58 @@ fn sync_settings_to_config_file(
     std::fs::write(config_path, updated).map_err(|e| format!("写入配置文件失败: {}", e))?;
 
     Ok(())
+}
+
+async fn resolve_patch_mode_for_active_config(
+    app: &AppHandle,
+    active_config_path: &str,
+    use_original_config_hint: Option<bool>,
+) -> ConfigPatchMode {
+    if use_original_config_hint.is_some() {
+        return resolve_patch_mode_with_hint(None, use_original_config_hint);
+    }
+
+    let storage = match get_enhanced_storage(app).await {
+        Ok(storage) => storage,
+        Err(error) => {
+            tracing::warn!("读取数据库服务失败，回退使用 Full patch: {}", error);
+            return ConfigPatchMode::Full;
+        }
+    };
+
+    match storage.get_subscriptions().await {
+        Ok(subscriptions) => resolve_patch_mode_for_subscription(
+            subscriptions
+                .iter()
+                .find(|sub| sub.config_path.as_deref() == Some(active_config_path)),
+        ),
+        Err(error) => {
+            tracing::warn!("读取订阅列表失败，回退使用 Full patch: {}", error);
+            ConfigPatchMode::Full
+        }
+    }
+}
+
+pub(crate) async fn apply_runtime_config_update(
+    app: &AppHandle,
+    effective_config: &AppConfig,
+    use_original_config_hint: Option<bool>,
+    reason: &'static str,
+) {
+    if let Some(path) = effective_config.active_config_path.as_deref() {
+        let config_path = std::path::PathBuf::from(path);
+        if config_path.exists() {
+            let patch_mode =
+                resolve_patch_mode_for_active_config(app, path, use_original_config_hint).await;
+            if let Err(error) =
+                sync_settings_to_config_file(&config_path, effective_config, patch_mode)
+            {
+                tracing::warn!("同步活动配置文件失败: {}", error);
+            }
+        }
+    }
+
+    auto_manage_with_saved_config(app, false, reason).await;
 }
 
 /// 获取数据库服务的辅助函数（单例初始化）
@@ -337,31 +402,10 @@ pub async fn db_save_app_config(
         return Ok(());
     }
 
+    let effective_config = db_get_app_config_internal(&app).await?;
     // 保存设置后，尽量把变更同步到“当前生效配置文件”，避免用户需要重新下载订阅/重启应用才能生效。
     // 同步逻辑采用“局部 patch”策略：如果配置文件不是本程序生成的结构，会尽量只修改端口/TUN/DNS 策略等通用字段。
-    let effective_config = db_get_app_config_internal(&app).await?;
-    let storage = get_enhanced_storage(&app).await?;
-    if let Some(path) = effective_config.active_config_path.clone() {
-        let config_path = std::path::PathBuf::from(path);
-        if config_path.exists() {
-            let active_path = config_path.to_string_lossy();
-            let patch_mode = match storage.get_subscriptions().await {
-                Ok(subs) => resolve_patch_mode_for_subscription(
-                    subs.iter()
-                        .find(|sub| sub.config_path.as_deref() == Some(active_path.as_ref())),
-                ),
-                Err(_) => ConfigPatchMode::Full,
-            };
-            if let Err(e) =
-                sync_settings_to_config_file(&config_path, &effective_config, patch_mode)
-            {
-                tracing::warn!("保存设置后同步到配置文件失败: {}", e);
-            }
-        }
-    }
-
-    // 应用配置更新后，根据最新设置自动管理内核运行状态
-    auto_manage_with_saved_config(&app, false, "app-config-updated").await;
+    apply_runtime_config_update(&app, &effective_config, None, "app-config-updated").await;
 
     Ok(())
 }
@@ -484,7 +528,7 @@ pub async fn db_save_active_subscription_index(
             subscription
                 .and_then(|sub| sub.config_path.clone())
                 .map(std::path::PathBuf::from),
-            resolve_patch_mode_for_subscription(subscription),
+            resolve_patch_mode_with_hint(subscription, None),
         )
     } else {
         (None, ConfigPatchMode::Full)
@@ -509,4 +553,62 @@ pub async fn db_save_active_subscription_index(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        resolve_patch_mode_for_subscription, resolve_patch_mode_with_hint, ConfigPatchMode,
+    };
+    use crate::app::storage::state_model::Subscription;
+
+    fn build_subscription(use_original_config: bool) -> Subscription {
+        Subscription {
+            name: "test".to_string(),
+            url: "https://example.com/sub".to_string(),
+            is_loading: false,
+            last_update: None,
+            is_manual: false,
+            manual_content: None,
+            use_original_config,
+            config_path: Some("/tmp/sub.json".to_string()),
+            backup_path: None,
+            auto_update_interval_minutes: Some(60),
+            subscription_upload: None,
+            subscription_download: None,
+            subscription_total: None,
+            subscription_expire: None,
+            auto_update_fail_count: None,
+            last_auto_update_attempt: None,
+            last_auto_update_error: None,
+            last_auto_update_error_type: None,
+            last_auto_update_backoff_until: None,
+        }
+    }
+
+    #[test]
+    fn should_use_ports_only_for_original_subscription_without_hint() {
+        let subscription = build_subscription(true);
+        assert_eq!(
+            resolve_patch_mode_for_subscription(Some(&subscription)),
+            ConfigPatchMode::PortsOnly
+        );
+    }
+
+    #[test]
+    fn should_trust_explicit_original_hint_when_subscription_missing() {
+        assert_eq!(
+            resolve_patch_mode_with_hint(None, Some(true)),
+            ConfigPatchMode::PortsOnly
+        );
+    }
+
+    #[test]
+    fn should_trust_explicit_non_original_hint_over_subscription_state() {
+        let subscription = build_subscription(true);
+        assert_eq!(
+            resolve_patch_mode_with_hint(Some(&subscription), Some(false)),
+            ConfigPatchMode::Full
+        );
+    }
 }

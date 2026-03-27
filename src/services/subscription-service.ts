@@ -6,6 +6,10 @@ export interface SubscriptionPersistOptions {
   applyRuntime?: boolean
 }
 
+export interface SetActiveConfigOptions {
+  useOriginalConfig?: boolean
+}
+
 interface BackendSubscriptionPersistResult {
   config_path: string
   subscription_upload?: number | null
@@ -59,10 +63,13 @@ export const subscriptionService = {
     ).then(mapPersistResult)
   },
 
-  setActiveConfig(configPath: string | null) {
+  setActiveConfig(configPath: string | null, options: SetActiveConfigOptions = {}) {
     return invokeWithAppContext<void>(
       'set_active_config_path',
-      { configPath },
+      {
+        configPath,
+        useOriginalConfig: options.useOriginalConfig,
+      },
       undefined,
     )
   },

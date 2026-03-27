@@ -9,7 +9,8 @@ use crate::app::core::proxy_service::apply_proxy_runtime_state;
 use crate::app::singbox::config_generator;
 use crate::app::singbox::settings_patch::apply_port_settings_only;
 use crate::app::storage::enhanced_storage_service::{
-    db_get_app_config, db_get_subscriptions, db_save_app_config, db_save_subscriptions,
+    apply_runtime_config_update, db_get_app_config, db_get_subscriptions,
+    db_save_app_config_internal, db_save_subscriptions,
 };
 use crate::app::storage::state_model::AppConfig;
 use crate::utils::http_client;
@@ -299,6 +300,7 @@ pub async fn download_subscription(
         if let Err(e) = set_active_config_path(
             app_handle.clone(),
             Some(target_path.to_string_lossy().to_string()),
+            Some(use_original_config),
         )
         .await
         {
@@ -368,6 +370,7 @@ pub async fn add_manual_subscription(
         if let Err(e) = set_active_config_path(
             app_handle.clone(),
             Some(target_path.to_string_lossy().to_string()),
+            Some(use_original_config),
         )
         .await
         {
@@ -414,6 +417,7 @@ pub async fn get_current_config(app_handle: AppHandle) -> Result<String, String>
 pub async fn set_active_config_path(
     app_handle: AppHandle,
     config_path: Option<String>,
+    use_original_config: Option<bool>,
 ) -> Result<(), String> {
     let mut app_config = db_get_app_config(app_handle.clone())
         .await
@@ -427,9 +431,19 @@ pub async fn set_active_config_path(
         previous, app_config.active_config_path
     );
 
-    db_save_app_config(app_config, app_handle, Some(true))
+    db_save_app_config_internal(app_config.clone(), &app_handle)
         .await
-        .map_err(|e| format!("保存配置路径失败: {}", e))
+        .map_err(|e| format!("保存配置路径失败: {}", e))?;
+
+    apply_runtime_config_update(
+        &app_handle,
+        &app_config,
+        use_original_config,
+        "active-config-path-updated",
+    )
+    .await;
+
+    Ok(())
 }
 
 #[tauri::command]
