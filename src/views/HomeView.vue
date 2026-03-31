@@ -181,6 +181,7 @@ import { useTrafficStore } from '@/stores/kernel/TrafficStore'
 import { useConnectionStore } from '@/stores/kernel/ConnectionStore'
 import { useThemeStore } from '@/stores/app/ThemeStore'
 import { kernelService } from '@/services/kernel-service'
+import { proxyService } from '@/services/proxy-service'
 import { sudoService } from '@/services/sudo-service'
 import { systemService } from '@/services/system-service'
 import StatusCard from '@/components/common/StatusCard.vue'
@@ -256,6 +257,18 @@ const nodeProxyModes = [
     icon: RadioOutline,
   },
 ]
+
+const syncCurrentNodeProxyMode = async () => {
+  try {
+    // 首页展示应以当前后端真实状态为准，而不是本地默认值。
+    const mode = await proxyService.getCurrentProxyMode()
+    if (mode === 'global' || mode === 'rule') {
+      currentNodeProxyMode.value = mode
+    }
+  } catch (error) {
+    // 后端未就绪时保持当前 UI 状态，避免启动阶段闪烁成错误模式。
+  }
+}
 
 // Methods
 const toggleSystemProxy = async (value: boolean) => {
@@ -500,8 +513,14 @@ const handleNodeProxyModeChange = async (mode: string) => {
   if (currentNodeProxyMode.value === mode) return
 
   try {
-    await kernelService.switchNodeProxyMode(mode as 'global' | 'rule')
-    currentNodeProxyMode.value = mode
+    const result = await kernelService.switchNodeProxyMode(mode as 'global' | 'rule')
+    await syncCurrentNodeProxyMode()
+
+    if (result.includes('重启后生效')) {
+      message.warning(result)
+      return
+    }
+
     message.success(t('home.nodeModeChangeSuccess'))
   } catch (error) {
     message.error(t('home.nodeModeChangeFailed'))
@@ -525,6 +544,7 @@ onMounted(async () => {
   }
   checkAdmin()
   await kernelStore.initializeStore()
+  await syncCurrentNodeProxyMode()
 })
 </script>
 

@@ -482,8 +482,8 @@ pub async fn toggle_proxy_mode(app_handle: AppHandle, mode: String) -> Result<St
 }
 
 #[tauri::command]
-pub fn get_current_proxy_mode() -> Result<String, String> {
-    mode::get_current_proxy_mode_impl()
+pub async fn get_current_proxy_mode(app_handle: AppHandle) -> Result<String, String> {
+    mode::get_current_proxy_mode_impl(app_handle).await
 }
 
 async fn download_and_process_subscription(
