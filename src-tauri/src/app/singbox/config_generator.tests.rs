@@ -1,5 +1,45 @@
 use super::*;
 use crate::app::storage::state_model::AppConfig;
+use serde_json::Value;
+
+fn assert_inbounds_do_not_contain_legacy_fields(config: &Value) {
+    let inbounds = config
+        .get("inbounds")
+        .and_then(|v| v.as_array())
+        .expect("inbounds 应存在");
+
+    for inbound in inbounds {
+        for legacy_field in [
+            "sniff",
+            "sniff_override_destination",
+            "sniff_timeout",
+            "domain_strategy",
+            "udp_disable_domain_unmapping",
+        ] {
+            assert!(
+                inbound.get(legacy_field).is_none(),
+                "inbound 不应包含 legacy 字段 {}: {:?}",
+                legacy_field,
+                inbound
+            );
+        }
+    }
+}
+
+fn assert_route_rules_keep_sniff_action(config: &Value) {
+    let rules = config
+        .get("route")
+        .and_then(|v| v.get("rules"))
+        .and_then(|v| v.as_array())
+        .expect("route.rules 应存在");
+
+    assert!(
+        rules.iter()
+            .any(|rule| rule.get("action").and_then(|v| v.as_str()) == Some("sniff")),
+        "route.rules 应保留 sniff action: {:?}",
+        rules
+    );
+}
 
 #[test]
 fn generated_dns_servers_should_use_new_format() {
@@ -155,4 +195,31 @@ fn fake_dns_global_non_cn_should_add_catch_all_query_rule() {
         catch_all.is_some(),
         "global_non_cn 模式应生成 A/AAAA catch-all fakeip 规则"
     );
+}
+
+#[test]
+fn generated_inbounds_should_not_use_legacy_fields() {
+    let config = generate_base_config(&AppConfig::default());
+
+    assert_inbounds_do_not_contain_legacy_fields(&config);
+    assert_route_rules_keep_sniff_action(&config);
+}
+
+#[test]
+fn generated_tun_inbounds_should_not_use_legacy_fields() {
+    let app_config = AppConfig {
+        tun_enabled: true,
+        tun_enable_ipv6: true,
+        ..AppConfig::default()
+    };
+
+    let config = generate_base_config(&app_config);
+    let inbounds = config
+        .get("inbounds")
+        .and_then(|v| v.as_array())
+        .expect("inbounds 应存在");
+
+    assert_eq!(inbounds.len(), 2, "启用 TUN 时应生成 mixed + tun 两个入站");
+    assert_inbounds_do_not_contain_legacy_fields(&config);
+    assert_route_rules_keep_sniff_action(&config);
 }

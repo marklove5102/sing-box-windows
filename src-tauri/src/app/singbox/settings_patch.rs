@@ -293,6 +293,8 @@ fn apply_profile_settings_if_present(config_obj: &mut Map<String, Value>, app_co
         }
 
         if let Some(rules) = route_obj.get_mut("rules").and_then(|v| v.as_array_mut()) {
+            let sniff_index = ensure_sniff_route_rule(rules);
+
             // 让规则里的 global/非CN 默认走用户选择的出站（manual/auto）
             for rule in rules.iter_mut() {
                 if let Some(obj) = rule.as_object_mut() {
@@ -320,7 +322,8 @@ fn apply_profile_settings_if_present(config_obj: &mut Map<String, Value>, app_co
             if app_config.singbox_dns_hijack {
                 if hijack_index.is_none() {
                     // 放在 sniff 后面通常更合适
-                    rules.insert(1, json!({ "protocol": "dns", "action": "hijack-dns" }));
+                    let insert_index = (sniff_index + 1).min(rules.len());
+                    rules.insert(insert_index, json!({ "protocol": "dns", "action": "hijack-dns" }));
                 }
             } else if let Some(i) = hijack_index {
                 rules.remove(i);
@@ -506,7 +509,6 @@ fn apply_inbounds_settings(config_obj: &mut Map<String, Value>, app_config: &App
         "tag": "mixed-in",
         "listen": proxy_listen_address(app_config),
         "listen_port": app_config.proxy_port,
-        "sniff": true,
         "set_system_proxy": app_config.system_proxy_enabled
     }));
 
@@ -520,11 +522,25 @@ fn apply_inbounds_settings(config_obj: &mut Map<String, Value>, app_config: &App
             "strict_route": app_config.tun_strict_route,
             "stack": app_config.tun_stack,
             "mtu": app_config.tun_mtu,
-            "sniff": true,
-            "sniff_override_destination": true,
             "route_exclude_address": TUN_ROUTE_EXCLUDES
         }));
     }
 
     config_obj.insert("inbounds".to_string(), json!(inbounds));
 }
+
+fn ensure_sniff_route_rule(rules: &mut Vec<Value>) -> usize {
+    if let Some(index) = rules
+        .iter()
+        .position(|rule| rule.get("action").and_then(|v| v.as_str()) == Some("sniff"))
+    {
+        index
+    } else {
+        rules.insert(0, json!({ "action": "sniff" }));
+        0
+    }
+}
+
+#[cfg(test)]
+#[path = "settings_patch.tests.rs"]
+mod tests;

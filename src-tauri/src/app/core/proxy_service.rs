@@ -64,8 +64,6 @@ fn build_inbounds_for_state(state: &ProxyRuntimeState) -> Vec<config_model::Inbo
         auto_route: None,
         strict_route: None,
         stack: None,
-        sniff: Some(true),
-        sniff_override_destination: Some(true),
         mtu: None,
         route_address: None,
         route_exclude_address: None,

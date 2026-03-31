@@ -104,8 +104,6 @@ impl TunProfile {
                 auto_route: None,
                 strict_route: None,
                 stack: None,
-                sniff: Some(true),
-                sniff_override_destination: Some(true),
                 mtu: None,
                 route_address: None,
                 route_exclude_address: None,
@@ -121,8 +119,6 @@ impl TunProfile {
                 auto_route: Some(self.auto_route),
                 strict_route: Some(self.strict_route),
                 stack: Some(self.stack.clone()),
-                sniff: Some(true),
-                sniff_override_destination: Some(true),
                 mtu: Some(self.mtu),
                 route_address: None,
                 route_exclude_address: Some(
