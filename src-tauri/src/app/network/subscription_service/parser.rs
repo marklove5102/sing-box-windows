@@ -1,5 +1,6 @@
 use base64::Engine as _;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use tracing::info;
 use url::Url;
 
@@ -40,9 +41,7 @@ pub fn extract_nodes_from_subscription(
                     };
 
                     match outbound_type {
-                        Some("vless") | Some("vmess") | Some("trojan") | Some("shadowsocks")
-                        | Some("shadowsocksr") | Some("socks") | Some("http")
-                        | Some("hysteria2") => {
+                        Some(outbound_type) if is_supported_outbound_type(outbound_type) => {
                             nodes.push(node_with_tag);
                         }
                         _ => {}
@@ -63,18 +62,7 @@ pub fn extract_nodes_from_subscription(
                                         let node_type =
                                             actual_node.get("type").and_then(|t| t.as_str());
                                         if let Some(type_str) = node_type {
-                                            if [
-                                                "vless",
-                                                "vmess",
-                                                "trojan",
-                                                "shadowsocks",
-                                                "shadowsocksr",
-                                                "socks",
-                                                "http",
-                                                "hysteria2",
-                                            ]
-                                            .contains(&type_str)
-                                            {
+                                            if is_supported_outbound_type(type_str) {
                                                 let node_with_tag =
                                                     if actual_node.get("tag").is_none() {
                                                         let mut node_obj = actual_node.clone();
@@ -126,18 +114,7 @@ pub fn extract_nodes_from_subscription(
                                         let item_type = item.get("type").and_then(|t| t.as_str());
 
                                         if let Some(t) = item_type {
-                                            if [
-                                                "vless",
-                                                "vmess",
-                                                "trojan",
-                                                "shadowsocks",
-                                                "shadowsocksr",
-                                                "socks",
-                                                "http",
-                                                "hysteria2",
-                                            ]
-                                            .contains(&t)
-                                            {
+                                            if is_supported_outbound_type(t) {
                                                 let node_with_tag = if !has_tag {
                                                     let server = item
                                                         .get("server")
@@ -183,7 +160,9 @@ pub fn extract_nodes_from_subscription(
                     || normalized_text.contains("ss://")
                     || normalized_text.contains("trojan://")
                     || normalized_text.contains("vless://")
-                    || normalized_text.contains("hysteria2://"))
+                    || normalized_text.contains("hysteria2://")
+                    || normalized_text.contains("tuic://")
+                    || normalized_text.contains("anytls://"))
             {
                 info!("检测到可能包含URI格式的节点，尝试逐行解析...");
                 nodes.extend(extract_nodes_from_uri_list(&normalized_text));
@@ -324,6 +303,22 @@ fn find_outbound_by_tag<'a>(outbounds: &'a [Value], tag: &str) -> Option<&'a Val
     outbounds
         .iter()
         .find(|outbound| outbound.get("tag").and_then(|t| t.as_str()) == Some(tag))
+}
+
+fn is_supported_outbound_type(node_type: &str) -> bool {
+    matches!(
+        node_type,
+        "vless"
+            | "vmess"
+            | "trojan"
+            | "shadowsocks"
+            | "shadowsocksr"
+            | "socks"
+            | "http"
+            | "hysteria2"
+            | "tuic"
+            | "anytls"
+    )
 }
 
 fn convert_clash_node_to_singbox(clash_node: &Value) -> Option<Value> {
@@ -534,6 +529,12 @@ fn convert_uri_node_to_singbox(uri: &str) -> Option<Value> {
     if uri.starts_with("hysteria2://") {
         return parse_hysteria2_uri(uri);
     }
+    if uri.starts_with("tuic://") {
+        return parse_tuic_uri(uri);
+    }
+    if uri.starts_with("anytls://") {
+        return parse_anytls_uri(uri);
+    }
     None
 }
 
@@ -557,6 +558,37 @@ fn normalize_fingerprint(fingerprint: Option<&str>) -> String {
         .to_string()
 }
 
+fn parse_query_map(url: &Url) -> HashMap<String, String> {
+    let mut query = HashMap::<String, String>::new();
+    for (k, v) in url.query_pairs() {
+        query.insert(k.to_string(), v.to_string());
+    }
+    query
+}
+
+fn parse_boolish(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn parse_csv_string_array(value: Option<&str>) -> Option<Value> {
+    let list: Vec<Value> = value?
+        .split(',')
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+        .map(|item| Value::String(item.to_string()))
+        .collect();
+
+    if list.is_empty() {
+        None
+    } else {
+        Some(Value::Array(list))
+    }
+}
+
 fn build_tls_config(server: &str, server_name: &str, fingerprint: &str) -> Value {
     json!({
         "enabled": true,
@@ -565,6 +597,14 @@ fn build_tls_config(server: &str, server_name: &str, fingerprint: &str) -> Value
             "enabled": true,
             "fingerprint": normalize_fingerprint(Some(fingerprint))
         }
+    })
+}
+
+fn build_basic_tls_config(server: &str, server_name: &str, insecure: bool) -> Value {
+    json!({
+        "enabled": true,
+        "server_name": if server_name.is_empty() { server.to_string() } else { server_name.to_string() },
+        "insecure": insecure
     })
 }
 
@@ -578,10 +618,7 @@ fn parse_vless_uri(uri: &str) -> Option<Value> {
     let server = url.host_str()?.to_string();
     let server_port = url.port().unwrap_or(443) as u64;
 
-    let mut query = std::collections::HashMap::<String, String>::new();
-    for (k, v) in url.query_pairs() {
-        query.insert(k.to_string(), v.to_string());
-    }
+    let query = parse_query_map(&url);
 
     let tag = {
         let decoded = decode_tag(url.fragment());
@@ -676,10 +713,7 @@ fn parse_trojan_uri(uri: &str) -> Option<Value> {
     let server = url.host_str()?.to_string();
     let server_port = url.port().unwrap_or(443) as u64;
 
-    let mut query = std::collections::HashMap::<String, String>::new();
-    for (k, v) in url.query_pairs() {
-        query.insert(k.to_string(), v.to_string());
-    }
+    let query = parse_query_map(&url);
 
     let tag = {
         let decoded = decode_tag(url.fragment());
@@ -700,7 +734,8 @@ fn parse_trojan_uri(uri: &str) -> Option<Value> {
     let insecure = query
         .get("allowInsecure")
         .or_else(|| query.get("insecure"))
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .map(|v| v.as_str())
+        .and_then(parse_boolish)
         .unwrap_or(false);
 
     let mut node = json!({
@@ -753,10 +788,7 @@ fn parse_hysteria2_uri(uri: &str) -> Option<Value> {
     let server = url.host_str()?.to_string();
     let server_port = url.port().unwrap_or(443) as u64;
 
-    let mut query = std::collections::HashMap::<String, String>::new();
-    for (k, v) in url.query_pairs() {
-        query.insert(k.to_string(), v.to_string());
-    }
+    let query = parse_query_map(&url);
 
     let tag = {
         let decoded = decode_tag(url.fragment());
@@ -776,25 +808,13 @@ fn parse_hysteria2_uri(uri: &str) -> Option<Value> {
 
     let insecure = query
         .get("insecure")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .map(|v| v.as_str())
+        .and_then(parse_boolish)
         .unwrap_or(false);
 
-    let mut tls = json!({
-        "enabled": true,
-        "server_name": if sni.is_empty() { server.clone() } else { sni.to_string() },
-        "insecure": insecure
-    });
-
-    if let Some(alpn) = query.get("alpn") {
-        let list: Vec<Value> = alpn
-            .split(',')
-            .map(|item| item.trim())
-            .filter(|item| !item.is_empty())
-            .map(|item| Value::String(item.to_string()))
-            .collect();
-        if !list.is_empty() {
-            tls["alpn"] = Value::Array(list);
-        }
+    let mut tls = build_basic_tls_config(&server, sni, insecure);
+    if let Some(alpn) = parse_csv_string_array(query.get("alpn").map(|s| s.as_str())) {
+        tls["alpn"] = alpn;
     }
 
     Some(json!({
@@ -805,6 +825,166 @@ fn parse_hysteria2_uri(uri: &str) -> Option<Value> {
         "password": password,
         "tls": tls
     }))
+}
+
+fn parse_tuic_uri(uri: &str) -> Option<Value> {
+    let url = Url::parse(uri).ok()?;
+    let uuid = url.username().trim();
+    if uuid.is_empty() {
+        return None;
+    }
+
+    let server = url.host_str()?.to_string();
+    let server_port = url.port().unwrap_or(443) as u64;
+    let query = parse_query_map(&url);
+    let tag = {
+        let decoded = decode_tag(url.fragment());
+        if decoded.is_empty() {
+            default_tag_for_url(&url)
+        } else {
+            decoded
+        }
+    };
+
+    let password = url.password().map(str::trim).filter(|value| !value.is_empty());
+    let sni = query
+        .get("sni")
+        .or_else(|| query.get("servername"))
+        .map(|s| s.trim())
+        .unwrap_or("");
+    let insecure = query
+        .get("insecure")
+        .map(|s| s.as_str())
+        .and_then(parse_boolish)
+        .unwrap_or(false);
+
+    let mut node = json!({
+        "tag": tag,
+        "type": "tuic",
+        "server": server,
+        "server_port": server_port,
+        "uuid": uuid,
+        "tls": build_basic_tls_config(&server, sni, insecure)
+    });
+
+    if let Some(password) = password {
+        node["password"] = json!(password);
+    }
+
+    if let Some(alpn) = parse_csv_string_array(query.get("alpn").map(|s| s.as_str())) {
+        node["tls"]["alpn"] = alpn;
+    }
+
+    if let Some(congestion_control) = query
+        .get("congestion_control")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        node["congestion_control"] = json!(congestion_control);
+    }
+    if let Some(udp_relay_mode) = query
+        .get("udp_relay_mode")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        node["udp_relay_mode"] = json!(udp_relay_mode);
+    }
+    if let Some(heartbeat) = query
+        .get("heartbeat")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        node["heartbeat"] = json!(heartbeat);
+    }
+    if let Some(network) = query
+        .get("network")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        node["network"] = json!(network);
+    }
+    if let Some(udp_over_stream) = query
+        .get("udp_over_stream")
+        .map(|s| s.as_str())
+        .and_then(parse_boolish)
+    {
+        node["udp_over_stream"] = json!(udp_over_stream);
+    }
+    if let Some(zero_rtt_handshake) = query
+        .get("zero_rtt_handshake")
+        .map(|s| s.as_str())
+        .and_then(parse_boolish)
+    {
+        node["zero_rtt_handshake"] = json!(zero_rtt_handshake);
+    }
+
+    Some(node)
+}
+
+fn parse_anytls_uri(uri: &str) -> Option<Value> {
+    let url = Url::parse(uri).ok()?;
+    let password = url.username().trim();
+    if password.is_empty() {
+        return None;
+    }
+
+    let server = url.host_str()?.to_string();
+    let server_port = url.port().unwrap_or(443) as u64;
+    let query = parse_query_map(&url);
+    let tag = {
+        let decoded = decode_tag(url.fragment());
+        if decoded.is_empty() {
+            default_tag_for_url(&url)
+        } else {
+            decoded
+        }
+    };
+
+    let sni = query
+        .get("sni")
+        .or_else(|| query.get("servername"))
+        .map(|s| s.trim())
+        .unwrap_or("");
+    let insecure = query
+        .get("insecure")
+        .map(|s| s.as_str())
+        .and_then(parse_boolish)
+        .unwrap_or(false);
+
+    let mut node = json!({
+        "tag": tag,
+        "type": "anytls",
+        "server": server,
+        "server_port": server_port,
+        "password": password,
+        "tls": build_basic_tls_config(&server, sni, insecure)
+    });
+
+    if let Some(alpn) = parse_csv_string_array(query.get("alpn").map(|s| s.as_str())) {
+        node["tls"]["alpn"] = alpn;
+    }
+    if let Some(idle_session_check_interval) = query
+        .get("idle_session_check_interval")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        node["idle_session_check_interval"] = json!(idle_session_check_interval);
+    }
+    if let Some(idle_session_timeout) = query
+        .get("idle_session_timeout")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        node["idle_session_timeout"] = json!(idle_session_timeout);
+    }
+    if let Some(min_idle_session) = query
+        .get("min_idle_session")
+        .and_then(|s| s.trim().parse::<u64>().ok())
+    {
+        node["min_idle_session"] = json!(min_idle_session);
+    }
+
+    Some(node)
 }
 
 fn parse_vmess_uri(uri: &str) -> Option<Value> {
