@@ -167,6 +167,12 @@ pub fn run() {
                 )
                 .await;
 
+                if let Err(err) =
+                    crate::app::tray::refresh_runtime_state_from_backend(&app_handle, true).await
+                {
+                    tracing::warn!("启动阶段刷新托盘运行态失败: {}", err);
+                }
+
                 // 启动后台任务（自动更新检查、健康巡检等）
                 crate::app::system::background_tasks::start_background_tasks(&app_handle).await;
                 // 启动订阅自动刷新
@@ -180,6 +186,11 @@ pub fn run() {
                         crate::app::tray::enter_startup_background_mode(&app_handle, true)
                     {
                         tracing::warn!("开机自启轻量模式进入失败: {}", err);
+                    } else if let Err(err) =
+                        crate::app::tray::refresh_runtime_state_from_backend(&app_handle, true)
+                            .await
+                    {
+                        tracing::warn!("轻量模式启动后刷新托盘失败: {}", err);
                     }
                 }
             });

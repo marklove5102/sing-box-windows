@@ -7,6 +7,7 @@ use super::state::TrayRuntimeState;
 use crate::app::core::kernel_service::runtime::{apply_proxy_settings, kernel_restart_fast};
 use crate::app::core::kernel_service::status::is_kernel_running;
 use crate::app::storage::enhanced_storage_service::db_save_app_config_internal;
+use crate::app::storage::state_model::AppConfig;
 use lazy_static::lazy_static;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -622,7 +623,7 @@ async fn restart_kernel_from_tray(app: &AppHandle) -> Result<(), String> {
             .to_string());
     }
 
-    refresh_runtime_state_from_backend(app).await
+    refresh_runtime_state_from_backend(app, false).await
 }
 
 async fn apply_system_proxy_toggle_from_tray(app: &AppHandle, enabled: bool) -> Result<(), String> {
@@ -645,7 +646,7 @@ async fn apply_system_proxy_toggle_from_tray(app: &AppHandle, enabled: bool) -> 
     app_config.proxy_mode =
         derive_proxy_mode(app_config.system_proxy_enabled, app_config.tun_enabled);
     db_save_app_config_internal(app_config, app).await?;
-    refresh_runtime_state_from_backend(app).await
+    refresh_runtime_state_from_backend(app, false).await
 }
 
 async fn apply_tun_toggle_from_tray(app: &AppHandle, enabled: bool) -> Result<(), String> {
@@ -694,7 +695,7 @@ async fn apply_tun_toggle_from_tray(app: &AppHandle, enabled: bool) -> Result<()
         app_config.proxy_mode =
             derive_proxy_mode(app_config.system_proxy_enabled, app_config.tun_enabled);
         db_save_app_config_internal(app_config, app).await?;
-        return refresh_runtime_state_from_backend(app).await;
+        return refresh_runtime_state_from_backend(app, false).await;
     }
 
     #[cfg(target_os = "windows")]
@@ -770,7 +771,7 @@ async fn apply_tun_toggle_from_tray(app: &AppHandle, enabled: bool) -> Result<()
     app_config.proxy_mode =
         derive_proxy_mode(app_config.system_proxy_enabled, app_config.tun_enabled);
     db_save_app_config_internal(app_config, app).await?;
-    refresh_runtime_state_from_backend(app).await
+    refresh_runtime_state_from_backend(app, false).await
 }
 
 fn derive_proxy_mode(system_proxy_enabled: bool, tun_enabled: bool) -> String {
@@ -783,36 +784,46 @@ fn derive_proxy_mode(system_proxy_enabled: bool, tun_enabled: bool) -> String {
     }
 }
 
-async fn refresh_runtime_state_from_backend(app: &AppHandle) -> Result<(), String> {
+fn apply_backend_runtime_snapshot(
+    state: &mut TrayRuntimeState,
+    app_config: &AppConfig,
+    kernel_running: bool,
+) -> bool {
+    let mut changed = false;
+    let close_behavior = TrayCloseBehavior::from_raw(&app_config.tray_close_behavior);
+
+    if state.system_proxy_enabled != app_config.system_proxy_enabled {
+        state.system_proxy_enabled = app_config.system_proxy_enabled;
+        changed = true;
+    }
+    if state.tun_enabled != app_config.tun_enabled {
+        state.tun_enabled = app_config.tun_enabled;
+        changed = true;
+    }
+    if state.kernel_running != kernel_running {
+        state.kernel_running = kernel_running;
+        changed = true;
+    }
+    if state.close_behavior != close_behavior {
+        state.close_behavior = close_behavior;
+        changed = true;
+    }
+
+    changed
+}
+
+pub async fn refresh_runtime_state_from_backend(
+    app: &AppHandle,
+    force_refresh: bool,
+) -> Result<(), String> {
     let app_config =
         crate::app::storage::enhanced_storage_service::db_get_app_config_internal(app).await?;
     let kernel_running = is_kernel_running().await.unwrap_or(false);
-    let close_behavior = TrayCloseBehavior::from_raw(&app_config.tray_close_behavior);
-
     let changed = with_state_write(|state| {
-        let mut changed = false;
-
-        if state.system_proxy_enabled != app_config.system_proxy_enabled {
-            state.system_proxy_enabled = app_config.system_proxy_enabled;
-            changed = true;
-        }
-        if state.tun_enabled != app_config.tun_enabled {
-            state.tun_enabled = app_config.tun_enabled;
-            changed = true;
-        }
-        if state.kernel_running != kernel_running {
-            state.kernel_running = kernel_running;
-            changed = true;
-        }
-        if state.close_behavior != close_behavior {
-            state.close_behavior = close_behavior;
-            changed = true;
-        }
-
-        changed
+        apply_backend_runtime_snapshot(state, &app_config, kernel_running)
     });
 
-    if changed {
+    if changed || force_refresh {
         refresh_tray(app)?;
     }
 
@@ -841,4 +852,62 @@ fn queue_proxy_toggle_for_frontend(
         state.set_pending_proxy_toggle(payload);
     });
     show_main_window(app, true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::storage::state_model::AppConfig;
+
+    fn sample_app_config() -> AppConfig {
+        AppConfig {
+            system_proxy_enabled: true,
+            tun_enabled: false,
+            tray_close_behavior: "lightweight".to_string(),
+            ..AppConfig::default()
+        }
+    }
+
+    #[test]
+    fn backend_runtime_sync_updates_proxy_related_fields() {
+        let mut state = TrayRuntimeState::default();
+        let config = sample_app_config();
+
+        let changed = apply_backend_runtime_snapshot(&mut state, &config, true);
+
+        assert!(changed);
+        assert!(state.system_proxy_enabled);
+        assert!(!state.tun_enabled);
+        assert!(state.kernel_running);
+        assert_eq!(state.close_behavior, TrayCloseBehavior::Lightweight);
+    }
+
+    #[test]
+    fn backend_runtime_sync_preserves_window_lifecycle_fields() {
+        let mut state = TrayRuntimeState {
+            window_visible: false,
+            last_visible_route: "/settings".to_string(),
+            pending_restore_route: Some("/settings".to_string()),
+            keep_alive_without_windows: true,
+            allow_app_exit: true,
+            ..TrayRuntimeState::default()
+        };
+        let config = AppConfig {
+            system_proxy_enabled: false,
+            tun_enabled: true,
+            tray_close_behavior: "hide".to_string(),
+            ..AppConfig::default()
+        };
+
+        let changed = apply_backend_runtime_snapshot(&mut state, &config, false);
+
+        assert!(changed);
+        assert!(!state.window_visible);
+        assert_eq!(state.last_visible_route, "/settings");
+        assert_eq!(state.pending_restore_route.as_deref(), Some("/settings"));
+        assert!(state.keep_alive_without_windows);
+        assert!(state.allow_app_exit);
+        assert!(state.tun_enabled);
+        assert_eq!(state.close_behavior, TrayCloseBehavior::Hide);
+    }
 }
