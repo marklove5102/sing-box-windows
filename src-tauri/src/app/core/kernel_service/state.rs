@@ -213,6 +213,7 @@ impl KernelRuntimeConfig {
                 strict_route: config.tun_strict_route,
                 stack: config.tun_stack.clone(),
                 enable_ipv6: config.tun_enable_ipv6,
+                route_exclude_address: config.tun_route_exclude_address.clone(),
                 interface_name: None,
             }),
             system_proxy_enabled: Some(config.system_proxy_enabled),

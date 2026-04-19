@@ -11,6 +11,7 @@ interface AppStoreLike {
   tunMtu: number
   tunStack: string
   tunEnableIpv6: boolean
+  tunRouteExcludeAddress: string[] | null
   tunAutoRoute: boolean
   tunStrictRoute: boolean
   tunSelfHealEnabled: boolean
@@ -34,7 +35,7 @@ interface AppStoreLike {
 interface UseAdvancedSettingsFormOptions {
   appStore: AppStoreLike
   message: MessageApiLike
-  t: (key: string) => string
+  t: (key: string, params?: Record<string, string | number>) => string
 }
 
 const IPV4_CIDR_RE =
@@ -47,6 +48,23 @@ const isLikelyCidr = (value: string, family: 'ipv4' | 'ipv6') => {
   return family === 'ipv4' ? IPV4_CIDR_RE.test(trimmed) : IPV6_CIDR_RE.test(trimmed)
 }
 
+const isLikelyAnyCidr = (value: string) =>
+  isLikelyCidr(value, 'ipv4') || isLikelyCidr(value, 'ipv6')
+
+const parseTunRouteExcludeAddressLines = (value: string) =>
+  value
+    .split(/\r?\n/)
+    .map((line, index) => ({
+      line: index + 1,
+      value: line.trim(),
+    }))
+    .filter((entry) => entry.value.length > 0)
+
+const normalizeTunRouteExcludeAddress = (value: string) => {
+  const lines = parseTunRouteExcludeAddressLines(value).map((entry) => entry.value)
+  return lines.length > 0 ? lines : null
+}
+
 export const useAdvancedSettingsForm = (options: UseAdvancedSettingsFormOptions) => {
   const savingAdvanced = ref(false)
   const proxyAdvancedForm = reactive({
@@ -54,6 +72,7 @@ export const useAdvancedSettingsForm = (options: UseAdvancedSettingsFormOptions)
     tunMtu: 9000,
     tunStack: 'mixed' as 'system' | 'gvisor' | 'mixed',
     tunEnableIpv6: false,
+    tunRouteExcludeAddressText: '',
     tunAutoRoute: true,
     tunStrictRoute: true,
     tunSelfHealEnabled: true,
@@ -101,6 +120,8 @@ export const useAdvancedSettingsForm = (options: UseAdvancedSettingsFormOptions)
       proxyAdvancedForm.tunMtu = options.appStore.tunMtu
       proxyAdvancedForm.tunStack = options.appStore.tunStack as 'system' | 'gvisor' | 'mixed'
       proxyAdvancedForm.tunEnableIpv6 = options.appStore.tunEnableIpv6
+      proxyAdvancedForm.tunRouteExcludeAddressText =
+        options.appStore.tunRouteExcludeAddress?.join('\n') ?? ''
       proxyAdvancedForm.tunAutoRoute = options.appStore.tunAutoRoute
       proxyAdvancedForm.tunStrictRoute = options.appStore.tunStrictRoute
       proxyAdvancedForm.tunSelfHealEnabled = options.appStore.tunSelfHealEnabled
@@ -137,6 +158,20 @@ export const useAdvancedSettingsForm = (options: UseAdvancedSettingsFormOptions)
       return
     }
 
+    const invalidRouteExcludeAddressLine = parseTunRouteExcludeAddressLines(
+      proxyAdvancedForm.tunRouteExcludeAddressText,
+    ).find((entry) => !isLikelyAnyCidr(entry.value))
+
+    if (invalidRouteExcludeAddressLine) {
+      options.message.error(
+        options.t('setting.proxyAdvanced.errors.tunRouteExcludeAddressInvalidLine', {
+          line: invalidRouteExcludeAddressLine.line,
+          value: invalidRouteExcludeAddressLine.value,
+        }),
+      )
+      return
+    }
+
     savingAdvanced.value = true
     try {
       options.appStore.systemProxyBypass = proxyAdvancedForm.systemProxyBypass
@@ -145,6 +180,9 @@ export const useAdvancedSettingsForm = (options: UseAdvancedSettingsFormOptions)
       options.appStore.tunStrictRoute = proxyAdvancedForm.tunStrictRoute
       options.appStore.tunStack = proxyAdvancedForm.tunStack
       options.appStore.tunEnableIpv6 = proxyAdvancedForm.tunEnableIpv6
+      options.appStore.tunRouteExcludeAddress = normalizeTunRouteExcludeAddress(
+        proxyAdvancedForm.tunRouteExcludeAddressText,
+      )
       options.appStore.tunSelfHealEnabled = proxyAdvancedForm.tunSelfHealEnabled
       options.appStore.tunSelfHealCooldownSecs = proxyAdvancedForm.tunSelfHealCooldownSecs
 

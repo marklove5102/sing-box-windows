@@ -553,6 +553,9 @@ export default {
         'IPv4/IPv6 の CIDR は 172.19.0.1/30 と fdfe:dcba:9876::1/126 に固定されています。',
       tunMtu: 'MTU',
       tunStack: 'スタックモード',
+      tunRouteExcludeAddress: '除外ルートアドレス',
+      tunRouteExcludeAddressPlaceholder:
+        '1 行につき 1 つの CIDR を入力してください。例:\n192.168.0.0/16\nfd00::/8\n空欄のままなら既定の動作を使います',
       enableIpv6: 'IPv6 アドレスを有効化',
       enableIpv6Desc: 'IPv6 が不要な環境では無効にしてください。',
       autoRoute: '自動ルート',
@@ -572,6 +575,7 @@ export default {
         invalidMtu: 'MTU は 576〜9000 の範囲で指定してください',
         invalidStack: '有効なスタックモードを選択してください',
         selfHealCooldownInvalid: '自己修復クールダウンは 15〜600 秒で指定してください',
+        tunRouteExcludeAddressInvalidLine: '{line} 行目の CIDR が不正です: {value}',
       },
     },
     singboxProfile: {

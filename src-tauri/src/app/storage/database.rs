@@ -1,4 +1,5 @@
 use super::error::StorageError;
+use crate::app::core::tun_profile::normalize_persisted_tun_route_exclude_address;
 use crate::app::storage::state_model::{
     AppConfig, LocaleConfig, ThemeConfig, UpdateConfig, WindowConfig,
 };
@@ -70,6 +71,7 @@ impl DatabaseService {
                 tun_ipv6 TEXT DEFAULT 'fdfe:dcba:9876::1/126',
                 tun_stack TEXT DEFAULT 'mixed',
                 tun_enable_ipv6 BOOLEAN DEFAULT FALSE,
+                tun_route_exclude_address TEXT,
                 active_config_path TEXT,
                 installed_kernel_version TEXT,
                 singbox_dns_proxy TEXT DEFAULT 'https://1.1.1.1/dns-query',
@@ -109,6 +111,7 @@ impl DatabaseService {
             "ALTER TABLE app_config ADD COLUMN tun_ipv6 TEXT DEFAULT 'fdfe:dcba:9876::1/126'",
             "ALTER TABLE app_config ADD COLUMN tun_stack TEXT DEFAULT 'mixed'",
             "ALTER TABLE app_config ADD COLUMN tun_enable_ipv6 BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE app_config ADD COLUMN tun_route_exclude_address TEXT",
             "ALTER TABLE app_config ADD COLUMN system_proxy_enabled BOOLEAN DEFAULT FALSE",
             "ALTER TABLE app_config ADD COLUMN tun_enabled BOOLEAN DEFAULT FALSE",
             "ALTER TABLE app_config ADD COLUMN active_config_path TEXT",
@@ -290,6 +293,9 @@ impl DatabaseService {
                 tun_enable_ipv6: row
                     .try_get("tun_enable_ipv6")
                     .unwrap_or(default_config.tun_enable_ipv6),
+                tun_route_exclude_address: parse_tun_route_exclude_address_column(
+                    row.try_get("tun_route_exclude_address").unwrap_or(None),
+                ),
                 active_config_path: row.try_get("active_config_path").unwrap_or(None),
                 installed_kernel_version: row.try_get("installed_kernel_version").unwrap_or(None),
                 singbox_dns_proxy: row
@@ -347,8 +353,8 @@ impl DatabaseService {
         sqlx::query(
             r#"
             INSERT OR REPLACE INTO app_config
-            (id, auto_start_kernel, auto_start_app, auto_hide_to_tray_on_autostart, tray_close_behavior, prefer_ipv6, allow_lan_access, proxy_port, api_port, proxy_mode, system_proxy_enabled, tun_enabled, tray_instance_id, system_proxy_bypass, tun_auto_route, tun_strict_route, tun_mtu, tun_ipv4, tun_ipv6, tun_stack, tun_enable_ipv6, active_config_path, installed_kernel_version, singbox_dns_proxy, singbox_dns_cn, singbox_dns_resolver, singbox_urltest_url, singbox_default_proxy_outbound, singbox_block_ads, singbox_download_detour, singbox_dns_hijack, singbox_fake_dns_enabled, singbox_fake_dns_ipv4_range, singbox_fake_dns_ipv6_range, singbox_fake_dns_filter_mode, singbox_enable_app_groups, tun_self_heal_enabled, tun_self_heal_cooldown_secs, updated_at)
-            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, auto_start_kernel, auto_start_app, auto_hide_to_tray_on_autostart, tray_close_behavior, prefer_ipv6, allow_lan_access, proxy_port, api_port, proxy_mode, system_proxy_enabled, tun_enabled, tray_instance_id, system_proxy_bypass, tun_auto_route, tun_strict_route, tun_mtu, tun_ipv4, tun_ipv6, tun_stack, tun_enable_ipv6, tun_route_exclude_address, active_config_path, installed_kernel_version, singbox_dns_proxy, singbox_dns_cn, singbox_dns_resolver, singbox_urltest_url, singbox_default_proxy_outbound, singbox_block_ads, singbox_download_detour, singbox_dns_hijack, singbox_fake_dns_enabled, singbox_fake_dns_ipv4_range, singbox_fake_dns_ipv6_range, singbox_fake_dns_filter_mode, singbox_enable_app_groups, tun_self_heal_enabled, tun_self_heal_cooldown_secs, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(config.auto_start_kernel)
@@ -371,6 +377,7 @@ impl DatabaseService {
         .bind(&config.tun_ipv6)
         .bind(&config.tun_stack)
         .bind(config.tun_enable_ipv6)
+        .bind(serialize_optional_json(&config.tun_route_exclude_address)?)
         .bind(&config.active_config_path)
         .bind(&config.installed_kernel_version)
         .bind(&config.singbox_dns_proxy)
@@ -609,5 +616,35 @@ impl DatabaseService {
     pub async fn close(&self) -> Result<(), StorageError> {
         self.pool.close().await;
         Ok(())
+    }
+}
+
+fn serialize_optional_json<T>(value: &Option<T>) -> Result<Option<String>, StorageError>
+where
+    T: Serialize,
+{
+    value
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(StorageError::Serialization)
+}
+
+fn parse_tun_route_exclude_address_column(raw: Option<String>) -> Option<Vec<String>> {
+    let raw = raw?;
+
+    if raw.trim().is_empty() {
+        return None;
+    }
+
+    match serde_json::from_str::<Vec<String>>(&raw) {
+        Ok(values) => normalize_persisted_tun_route_exclude_address(Some(values)),
+        Err(error) => {
+            tracing::warn!(
+                "检测到无效的已持久化 tun_route_exclude_address JSON，已回退为 None: {}",
+                error
+            );
+            None
+        }
     }
 }

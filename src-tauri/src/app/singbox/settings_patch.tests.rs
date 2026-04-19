@@ -1,4 +1,5 @@
 use super::*;
+use crate::app::core::tun_profile::default_tun_route_exclude_addresses;
 use crate::app::storage::state_model::AppConfig;
 use serde_json::{json, Value};
 
@@ -143,9 +144,155 @@ fn apply_app_settings_should_insert_sniff_route_for_legacy_configs() {
         .and_then(|v| v.as_array())
         .expect("route.rules 应存在");
     assert!(
-        rules.iter()
+        rules
+            .iter()
             .any(|rule| rule.get("action").and_then(|v| v.as_str()) == Some("sniff")),
         "旧配置迁移后应补充 sniff 规则: {:?}",
         rules
+    );
+}
+
+#[test]
+fn apply_app_settings_should_use_explicit_tun_route_exclude_address_override() {
+    let mut config = json!({
+        "dns": {
+            "servers": [],
+            "rules": []
+        },
+        "experimental": {
+            "clash_api": {},
+            "cache_file": {}
+        },
+        "inbounds": [],
+        "route": {
+            "rule_set": [],
+            "rules": [
+                {
+                    "action": "sniff"
+                }
+            ],
+            "final": "direct",
+            "auto_detect_interface": true
+        }
+    });
+    let app_config = AppConfig {
+        tun_enabled: true,
+        tun_route_exclude_address: Some(vec!["203.0.113.0/24".to_string()]),
+        ..AppConfig::default()
+    };
+
+    apply_app_settings_to_config(&mut config, &app_config);
+
+    let tun_in = config
+        .get("inbounds")
+        .and_then(|value| value.as_array())
+        .and_then(|inbounds| {
+            inbounds.iter().find(|inbound| {
+                inbound.get("tag").and_then(|value| value.as_str()) == Some("tun-in")
+            })
+        })
+        .expect("tun-in 应存在");
+
+    assert_eq!(
+        tun_in.get("route_exclude_address"),
+        Some(&json!(["203.0.113.0/24"]))
+    );
+}
+
+#[test]
+fn apply_app_settings_should_preserve_existing_tun_route_exclude_address_when_override_absent() {
+    let mut config = json!({
+        "dns": {
+            "servers": [],
+            "rules": []
+        },
+        "experimental": {
+            "clash_api": {},
+            "cache_file": {}
+        },
+        "inbounds": [
+            {
+                "type": "tun",
+                "tag": "tun-in",
+                "route_exclude_address": ["198.51.100.0/24"]
+            }
+        ],
+        "route": {
+            "rule_set": [],
+            "rules": [
+                {
+                    "action": "sniff"
+                }
+            ],
+            "final": "direct",
+            "auto_detect_interface": true
+        }
+    });
+    let app_config = AppConfig {
+        tun_enabled: true,
+        ..AppConfig::default()
+    };
+
+    apply_app_settings_to_config(&mut config, &app_config);
+
+    let tun_in = config
+        .get("inbounds")
+        .and_then(|value| value.as_array())
+        .and_then(|inbounds| {
+            inbounds.iter().find(|inbound| {
+                inbound.get("tag").and_then(|value| value.as_str()) == Some("tun-in")
+            })
+        })
+        .expect("tun-in 应存在");
+
+    assert_eq!(
+        tun_in.get("route_exclude_address"),
+        Some(&json!(["198.51.100.0/24"]))
+    );
+}
+
+#[test]
+fn apply_app_settings_should_fallback_to_canonical_tun_route_exclude_address_default() {
+    let mut config = json!({
+        "dns": {
+            "servers": [],
+            "rules": []
+        },
+        "experimental": {
+            "clash_api": {},
+            "cache_file": {}
+        },
+        "inbounds": [],
+        "route": {
+            "rule_set": [],
+            "rules": [
+                {
+                    "action": "sniff"
+                }
+            ],
+            "final": "direct",
+            "auto_detect_interface": true
+        }
+    });
+    let app_config = AppConfig {
+        tun_enabled: true,
+        ..AppConfig::default()
+    };
+
+    apply_app_settings_to_config(&mut config, &app_config);
+
+    let tun_in = config
+        .get("inbounds")
+        .and_then(|value| value.as_array())
+        .and_then(|inbounds| {
+            inbounds.iter().find(|inbound| {
+                inbound.get("tag").and_then(|value| value.as_str()) == Some("tun-in")
+            })
+        })
+        .expect("tun-in 应存在");
+
+    assert_eq!(
+        tun_in.get("route_exclude_address"),
+        Some(&json!(default_tun_route_exclude_addresses()))
     );
 }

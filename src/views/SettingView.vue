@@ -288,6 +288,17 @@
               </n-grid-item>
 
               <n-grid-item :span="24">
+                <n-form-item :label="t('setting.proxyAdvanced.tunRouteExcludeAddress')">
+                  <n-input
+                    v-model:value="proxyAdvancedForm.tunRouteExcludeAddressText"
+                    type="textarea"
+                    :rows="4"
+                    :placeholder="t('setting.proxyAdvanced.tunRouteExcludeAddressPlaceholder')"
+                  />
+                </n-form-item>
+              </n-grid-item>
+
+              <n-grid-item :span="24">
                 <div class="toggles-row">
                   <div class="toggle-item">
                     <span>{{ t('setting.proxyAdvanced.enableIpv6') }}</span>

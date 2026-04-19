@@ -69,6 +69,9 @@ export const useProxyStore = defineStore('proxy', () => {
       strict_route: appStore.tunStrictRoute,
       stack: appStore.tunStack,
       enable_ipv6: appStore.tunEnableIpv6,
+      ...(appStore.tunRouteExcludeAddress?.length
+        ? { route_exclude_address: [...appStore.tunRouteExcludeAddress] }
+        : {}),
     })
   }
 

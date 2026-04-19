@@ -22,6 +22,7 @@ export interface PersistenceState {
   tunStrictRoute: Ref<boolean>
   tunStack: Ref<string>
   tunEnableIpv6: Ref<boolean>
+  tunRouteExcludeAddress: Ref<string[] | null>
   activeConfigPath: Ref<string | null>
   installedKernelVersion: Ref<string | null>
   singboxDnsProxy: Ref<string>
@@ -132,6 +133,11 @@ export function createAppPersistence(state: PersistenceState) {
       state.tunStrictRoute.value = appConfig.tun_strict_route
       state.tunStack.value = appConfig.tun_stack
       state.tunEnableIpv6.value = appConfig.tun_enable_ipv6
+      state.tunRouteExcludeAddress.value =
+        Array.isArray(appConfig.tun_route_exclude_address) &&
+        appConfig.tun_route_exclude_address.length > 0
+          ? [...appConfig.tun_route_exclude_address]
+          : null
 
       // sing-box 配置生成高级选项（旧版本数据库可能没有这些字段）
       state.singboxDnsProxy.value = appConfig.singbox_dns_proxy || state.singboxDnsProxy.value
@@ -196,6 +202,9 @@ export function createAppPersistence(state: PersistenceState) {
       tun_strict_route: state.tunStrictRoute.value,
       tun_stack: state.tunStack.value,
       tun_enable_ipv6: state.tunEnableIpv6.value,
+      tun_route_exclude_address: state.tunRouteExcludeAddress.value?.length
+        ? [...state.tunRouteExcludeAddress.value]
+        : null,
       active_config_path: state.activeConfigPath.value,
       installed_kernel_version: state.installedKernelVersion.value,
       singbox_dns_proxy: state.singboxDnsProxy.value,
@@ -255,6 +264,7 @@ export function createAppPersistence(state: PersistenceState) {
       state.tunStrictRoute,
       state.tunStack,
       state.tunEnableIpv6,
+      state.tunRouteExcludeAddress,
       state.activeConfigPath,
       state.singboxDnsProxy,
       state.singboxDnsCn,

@@ -45,8 +45,7 @@ fn resolve_proxy_listen_address(state: &ProxyRuntimeState) -> &'static str {
 
 fn build_inbounds_for_state(state: &ProxyRuntimeState) -> Vec<config_model::Inbound> {
     if state.tun_enabled {
-        let mut inbounds =
-            TunProfile::from_options(&state.tun_options).to_inbounds(state.proxy_port);
+        let mut inbounds = TunProfile::from_options(&state.tun_options, None).to_inbounds(state.proxy_port);
         if let Some(mixed) = inbounds.get_mut(0) {
             mixed.listen = Some(resolve_proxy_listen_address(state).to_string());
             mixed.set_system_proxy = Some(state.system_proxy_enabled);

@@ -504,6 +504,9 @@ export default {
       tunAddressInfo: 'IPv4/IPv6 ranges are preset to 172.19.0.1/30 and fdfe:dcba:9876::1/126.',
       tunMtu: 'MTU',
       tunStack: 'Protocol stack',
+      tunRouteExcludeAddress: 'Route exclude addresses',
+      tunRouteExcludeAddressPlaceholder:
+        'One CIDR per line, e.g.\n192.168.0.0/16\nfd00::/8\nLeave blank to use the default behavior',
       enableIpv6: 'Enable IPv6 address',
       enableIpv6Desc: 'Disable when your network only requires IPv4 routing.',
       autoRoute: 'Auto route',
@@ -523,6 +526,7 @@ export default {
         invalidMtu: 'MTU must be between 576 and 9000',
         invalidStack: 'Please choose a valid stack mode',
         selfHealCooldownInvalid: 'Self-heal cooldown must be between 15 and 600 seconds',
+        tunRouteExcludeAddressInvalidLine: 'Line {line}: invalid CIDR "{value}"',
       },
     },
     singboxProfile: {

@@ -185,16 +185,14 @@ fn get_platform_priority_for(
     }
 
     let arch_bonus = match arch {
-        "x86_64" => {
+        "x86_64"
             if filename_lower.contains("x64")
                 || filename_lower.contains("x86_64")
-                || filename_lower.contains("amd64")
-            {
-                5
-            } else {
-                0
-            }
+                || filename_lower.contains("amd64") =>
+        {
+            5
         }
+        "x86_64" => 0,
         "aarch64" => {
             if filename_lower.contains("arm64") || filename_lower.contains("aarch64") {
                 5

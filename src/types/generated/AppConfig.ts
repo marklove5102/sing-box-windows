@@ -19,6 +19,7 @@ export interface AppConfig {
   tun_ipv6: string
   tun_stack: string
   tun_enable_ipv6: boolean
+  tun_route_exclude_address: string[] | null
   active_config_path: string | null
   installed_kernel_version: string | null
   singbox_dns_proxy: string

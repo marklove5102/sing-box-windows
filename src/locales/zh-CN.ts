@@ -498,6 +498,9 @@ export default {
       tunAddressInfo: '地址段已固定为 172.19.0.1/30 与 fdfe:dcba:9876::1/126。',
       tunMtu: 'MTU',
       tunStack: '协议栈模式',
+      tunRouteExcludeAddress: '排除路由地址',
+      tunRouteExcludeAddressPlaceholder:
+        '每行填写一个 CIDR，例如：\n192.168.0.0/16\nfd00::/8\n留空则使用默认行为',
       enableIpv6: '启用 IPv6 地址',
       enableIpv6Desc: '关闭后仅保留 IPv4 地址段，适合只需 IPv4 的网络环境。',
       autoRoute: '自动路由',
@@ -517,6 +520,7 @@ export default {
         invalidMtu: 'MTU 取值需在 576-9000 之间',
         invalidStack: '请选择合法的协议栈模式',
         selfHealCooldownInvalid: '自愈冷却时间需在 15-600 秒之间',
+        tunRouteExcludeAddressInvalidLine: '第 {line} 行 CIDR 无效：{value}',
       },
     },
     singboxProfile: {

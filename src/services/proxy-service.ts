@@ -46,6 +46,7 @@ export interface TunOptionsPayload {
   strict_route: boolean
   stack: 'system' | 'gvisor' | 'mixed'
   enable_ipv6: boolean
+  route_exclude_address?: string[]
 }
 
 export class ProxyService {

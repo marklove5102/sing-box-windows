@@ -25,6 +25,7 @@ pub struct AppConfig {
     pub tun_ipv6: String,
     pub tun_stack: String,
     pub tun_enable_ipv6: bool,
+    pub tun_route_exclude_address: Option<Vec<String>>,
     pub active_config_path: Option<String>,
     pub installed_kernel_version: Option<String>,
 
@@ -82,6 +83,7 @@ impl Default for AppConfig {
             tun_stack: "mixed".to_string(),
             // 新安装默认关闭：避免首次安装即启用 IPv6 TUN 造成意外行为
             tun_enable_ipv6: false,
+            tun_route_exclude_address: None,
             active_config_path: None,
             installed_kernel_version: None,
 

@@ -1,5 +1,6 @@
 use super::DatabaseService;
 use crate::app::core::kernel_auto_manage::auto_manage_with_saved_config;
+use crate::app::core::tun_profile::normalize_tun_route_exclude_address;
 use crate::app::storage::error::StorageResult;
 use crate::app::storage::state_model::{
     AppConfig, LocaleConfig, StartupPreferences, Subscription, ThemeConfig, UpdateConfig,
@@ -304,6 +305,12 @@ fn build_startup_preferences(config: &AppConfig) -> StartupPreferences {
     }
 }
 
+fn normalize_app_config_for_persistence(mut config: AppConfig) -> Result<AppConfig, String> {
+    config.tun_route_exclude_address =
+        normalize_tun_route_exclude_address(config.tun_route_exclude_address)?;
+    Ok(config)
+}
+
 pub fn read_startup_preferences_sync<R: tauri::Runtime>(
     app_handle: &AppHandle<R>,
 ) -> StartupPreferences {
@@ -378,6 +385,7 @@ pub async fn db_save_app_config_internal<R: tauri::Runtime>(
     config: AppConfig,
     app: &AppHandle<R>,
 ) -> Result<(), String> {
+    let config = normalize_app_config_for_persistence(config)?;
     let storage = get_enhanced_storage(app).await?;
     storage
         .save_app_config(&config)
@@ -558,7 +566,8 @@ pub async fn db_save_active_subscription_index(
 #[cfg(test)]
 mod tests {
     use super::{
-        resolve_patch_mode_for_subscription, resolve_patch_mode_with_hint, ConfigPatchMode,
+        normalize_app_config_for_persistence, resolve_patch_mode_for_subscription,
+        resolve_patch_mode_with_hint, ConfigPatchMode,
     };
     use crate::app::storage::state_model::Subscription;
 
@@ -609,6 +618,34 @@ mod tests {
         assert_eq!(
             resolve_patch_mode_with_hint(Some(&subscription), Some(false)),
             ConfigPatchMode::Full
+        );
+    }
+
+    #[test]
+    fn should_normalize_blank_tun_route_exclude_address_to_none() {
+        let normalized =
+            normalize_app_config_for_persistence(crate::app::storage::state_model::AppConfig {
+                tun_route_exclude_address: Some(vec!["  ".to_string(), "".to_string()]),
+                ..crate::app::storage::state_model::AppConfig::default()
+            })
+            .expect("blank route exclude address should normalize");
+
+        assert_eq!(normalized.tun_route_exclude_address, None);
+    }
+
+    #[test]
+    fn should_reject_invalid_tun_route_exclude_address_on_save() {
+        let error =
+            normalize_app_config_for_persistence(crate::app::storage::state_model::AppConfig {
+                tun_route_exclude_address: Some(vec!["invalid".to_string()]),
+                ..crate::app::storage::state_model::AppConfig::default()
+            })
+            .expect_err("invalid route exclude address should be rejected");
+
+        assert!(
+            error.contains("invalid"),
+            "error should mention invalid CIDR, got: {}",
+            error
         );
     }
 }

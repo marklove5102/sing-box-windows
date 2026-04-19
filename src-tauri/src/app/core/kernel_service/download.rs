@@ -432,8 +432,10 @@ async fn download_file(
 
         downloaded += chunk.len() as u64;
 
-        if total_size > 0 {
-            let progress = (downloaded * 100) / total_size;
+        if let Some(progress) = total_size
+            .checked_div(100)
+            .and_then(|scaled_total| downloaded.checked_div(scaled_total.max(1)))
+        {
             let _ = window.emit(
                 "kernel-download-progress",
                 json!({

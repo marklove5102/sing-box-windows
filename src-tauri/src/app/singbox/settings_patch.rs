@@ -6,7 +6,9 @@ use super::common::{
     RS_GEOSITE_YOUTUBE, TAG_AUTO, TAG_DIRECT, TAG_GOOGLE, TAG_NETFLIX, TAG_OPENAI, TAG_TELEGRAM,
     TAG_YOUTUBE,
 };
-use crate::app::core::tun_profile::TUN_ROUTE_EXCLUDES;
+use crate::app::core::tun_profile::{
+    default_tun_route_exclude_addresses, normalize_persisted_tun_route_exclude_address,
+};
 use crate::app::storage::state_model::AppConfig;
 use serde_json::{json, Map, Value};
 
@@ -323,7 +325,10 @@ fn apply_profile_settings_if_present(config_obj: &mut Map<String, Value>, app_co
                 if hijack_index.is_none() {
                     // 放在 sniff 后面通常更合适
                     let insert_index = (sniff_index + 1).min(rules.len());
-                    rules.insert(insert_index, json!({ "protocol": "dns", "action": "hijack-dns" }));
+                    rules.insert(
+                        insert_index,
+                        json!({ "protocol": "dns", "action": "hijack-dns" }),
+                    );
                 }
             } else if let Some(i) = hijack_index {
                 rules.remove(i);
@@ -500,6 +505,8 @@ fn apply_inbounds_settings(config_obj: &mut Map<String, Value>, app_config: &App
     if app_config.tun_enable_ipv6 {
         tun_addresses.push(app_config.tun_ipv6.clone());
     }
+    let tun_route_exclude_address =
+        resolve_tun_route_exclude_address_for_patch(config_obj, app_config);
 
     let mut inbounds = Vec::new();
 
@@ -522,11 +529,47 @@ fn apply_inbounds_settings(config_obj: &mut Map<String, Value>, app_config: &App
             "strict_route": app_config.tun_strict_route,
             "stack": app_config.tun_stack,
             "mtu": app_config.tun_mtu,
-            "route_exclude_address": TUN_ROUTE_EXCLUDES
+            "route_exclude_address": tun_route_exclude_address
         }));
     }
 
     config_obj.insert("inbounds".to_string(), json!(inbounds));
+}
+
+fn resolve_tun_route_exclude_address_for_patch(
+    config_obj: &Map<String, Value>,
+    app_config: &AppConfig,
+) -> Vec<String> {
+    if let Some(explicit) = app_config.tun_route_exclude_address.clone() {
+        return explicit;
+    }
+
+    extract_existing_tun_route_exclude_address(config_obj)
+        .unwrap_or_else(default_tun_route_exclude_addresses)
+}
+
+fn extract_existing_tun_route_exclude_address(
+    config_obj: &Map<String, Value>,
+) -> Option<Vec<String>> {
+    config_obj
+        .get("inbounds")
+        .and_then(|value| value.as_array())
+        .and_then(|inbounds| {
+            inbounds.iter().find(|inbound| {
+                inbound.get("tag").and_then(|value| value.as_str()) == Some("tun-in")
+            })
+        })
+        .and_then(|tun_in| tun_in.get("route_exclude_address"))
+        .and_then(|value| value.as_array())
+        .map(|route_exclude_address| {
+            route_exclude_address
+                .iter()
+                .filter_map(|value| value.as_str().map(|cidr| cidr.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .and_then(|route_exclude_address| {
+            normalize_persisted_tun_route_exclude_address(Some(route_exclude_address))
+        })
 }
 
 fn ensure_sniff_route_rule(rules: &mut Vec<Value>) -> usize {

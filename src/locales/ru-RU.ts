@@ -565,6 +565,9 @@ export default {
       tunAddressInfo: 'Диапазоны 172.19.0.1/30 и fdfe:dcba:9876::1/126 заданы по умолчанию.',
       tunMtu: 'MTU',
       tunStack: 'Сетевая стековая модель',
+      tunRouteExcludeAddress: 'Исключённые адреса маршрутизации',
+      tunRouteExcludeAddressPlaceholder:
+        'Указывайте по одному CIDR в строке, например:\n192.168.0.0/16\nfd00::/8\nОставьте пустым, чтобы использовать поведение по умолчанию',
       enableIpv6: 'Включить IPv6-адрес',
       enableIpv6Desc: 'Отключите, если вам нужен только IPv4-трафик.',
       autoRoute: 'Автомаршрутизация',
@@ -584,6 +587,7 @@ export default {
         invalidMtu: 'Значение MTU должно быть в пределах 576–9000',
         invalidStack: 'Выберите допустимый режим стека',
         selfHealCooldownInvalid: 'Задержка автовосстановления должна быть от 15 до 600 секунд',
+        tunRouteExcludeAddressInvalidLine: 'Строка {line}: неверный CIDR "{value}"',
       },
     },
     singboxProfile: {

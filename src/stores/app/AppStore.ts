@@ -82,6 +82,7 @@ export const useAppStore = defineStore(
     const tunStrictRoute = ref(true)
     const tunStack = ref<'system' | 'gvisor' | 'mixed'>('mixed')
     const tunEnableIpv6 = ref(false)
+    const tunRouteExcludeAddress = ref<string[] | null>(null)
     const activeConfigPath = ref<string | null>(null)
     const installedKernelVersion = ref<string | null>(null)
 
@@ -132,6 +133,7 @@ export const useAppStore = defineStore(
       tunStrictRoute,
       tunStack,
       tunEnableIpv6,
+      tunRouteExcludeAddress,
       activeConfigPath,
       installedKernelVersion,
       singboxDnsProxy,
@@ -358,6 +360,7 @@ export const useAppStore = defineStore(
       tunStrictRoute?: boolean
       tunStack?: 'system' | 'gvisor' | 'mixed'
       tunEnableIpv6?: boolean
+      tunRouteExcludeAddress?: string[] | null
       tunSelfHealEnabled?: boolean
       tunSelfHealCooldownSecs?: number
     }) => {
@@ -384,6 +387,11 @@ export const useAppStore = defineStore(
       }
       if (typeof settings.tunEnableIpv6 === 'boolean') {
         tunEnableIpv6.value = settings.tunEnableIpv6
+      }
+      if ('tunRouteExcludeAddress' in settings) {
+        tunRouteExcludeAddress.value = settings.tunRouteExcludeAddress?.length
+          ? [...settings.tunRouteExcludeAddress]
+          : null
       }
       if (typeof settings.tunSelfHealEnabled === 'boolean') {
         tunSelfHealEnabled.value = settings.tunSelfHealEnabled
@@ -454,6 +462,7 @@ export const useAppStore = defineStore(
       tunStrictRoute,
       tunStack,
       tunEnableIpv6,
+      tunRouteExcludeAddress,
       activeConfigPath,
       installedKernelVersion,
       singboxDnsProxy,

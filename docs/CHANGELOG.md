@@ -10,6 +10,7 @@
 
 - **URI 解析字段适配官方文档** - `tuic` 节点补齐 `congestion_control`、`udp_relay_mode`、`udp_over_stream`、`zero_rtt_handshake`、`heartbeat`、`network` 等常用参数映射；`anytls` 节点补齐 `idle_session_check_interval`、`idle_session_timeout`、`min_idle_session`，并统一写入标准 `tls.server_name` / `tls.insecure` / `tls.alpn`
 - **订阅入口提示同步更新** - 多语言文案中的 URI 支持说明补充 `tuic://`、`anytls://`，避免界面仍显示旧的协议支持范围
+- **TUN 排除路由地址前端配置（#49）** - 设置页新增 `route_exclude_address` 多行 CIDR 输入，保存前会先拦截明显无效的条目；留空时不写入该字段，继续使用后端/内核默认行为
 
 ### 🐛 问题修复
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::app::core::tun_profile::default_tun_route_exclude_addresses;
 use crate::app::storage::state_model::AppConfig;
 use serde_json::Value;
 
@@ -34,7 +35,8 @@ fn assert_route_rules_keep_sniff_action(config: &Value) {
         .expect("route.rules 应存在");
 
     assert!(
-        rules.iter()
+        rules
+            .iter()
             .any(|rule| rule.get("action").and_then(|v| v.as_str()) == Some("sniff")),
         "route.rules 应保留 sniff action: {:?}",
         rules
@@ -222,4 +224,53 @@ fn generated_tun_inbounds_should_not_use_legacy_fields() {
     assert_eq!(inbounds.len(), 2, "启用 TUN 时应生成 mixed + tun 两个入站");
     assert_inbounds_do_not_contain_legacy_fields(&config);
     assert_route_rules_keep_sniff_action(&config);
+}
+
+#[test]
+fn generated_tun_inbound_should_use_canonical_route_exclude_address_default() {
+    let app_config = AppConfig {
+        tun_enabled: true,
+        ..AppConfig::default()
+    };
+
+    let config = generate_base_config(&app_config);
+    let tun_in = config
+        .get("inbounds")
+        .and_then(|value| value.as_array())
+        .and_then(|inbounds| {
+            inbounds.iter().find(|inbound| {
+                inbound.get("tag").and_then(|value| value.as_str()) == Some("tun-in")
+            })
+        })
+        .expect("tun-in 应存在");
+
+    assert_eq!(
+        tun_in.get("route_exclude_address"),
+        Some(&serde_json::json!(default_tun_route_exclude_addresses()))
+    );
+}
+
+#[test]
+fn generated_tun_inbound_should_use_explicit_route_exclude_address_override() {
+    let app_config = AppConfig {
+        tun_enabled: true,
+        tun_route_exclude_address: Some(vec!["203.0.113.0/24".to_string()]),
+        ..AppConfig::default()
+    };
+
+    let config = generate_base_config(&app_config);
+    let tun_in = config
+        .get("inbounds")
+        .and_then(|value| value.as_array())
+        .and_then(|inbounds| {
+            inbounds.iter().find(|inbound| {
+                inbound.get("tag").and_then(|value| value.as_str()) == Some("tun-in")
+            })
+        })
+        .expect("tun-in 应存在");
+
+    assert_eq!(
+        tun_in.get("route_exclude_address"),
+        Some(&serde_json::json!(["203.0.113.0/24"]))
+    );
 }

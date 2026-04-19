@@ -169,6 +169,7 @@ pub async fn resolve_proxy_runtime_state(
         strict_route: app_config.tun_strict_route,
         stack: app_config.tun_stack.clone(),
         enable_ipv6: app_config.tun_enable_ipv6,
+        route_exclude_address: app_config.tun_route_exclude_address.clone(),
         interface_name: None,
     });
 
