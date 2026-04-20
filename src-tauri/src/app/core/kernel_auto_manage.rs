@@ -114,6 +114,9 @@ async fn auto_manage_kernel_internal(
     app_handle: AppHandle,
     options: AutoManageOptions,
 ) -> Result<AutoManageResult, String> {
+    let _attempt_id = crate::app::core::kernel_service::state::KERNEL_STATE
+        .begin_attempt("kernel-auto-manage");
+
     if let Err(err) = ensure_embedded_kernel(&app_handle).await {
         warn!("安装内嵌内核失败，继续按现有逻辑处理: {}", err);
     }
@@ -280,6 +283,39 @@ pub async fn kernel_auto_manage(
         },
     };
 
-    let result = auto_manage_kernel_internal(app_handle, options).await?;
+    let result = auto_manage_kernel_internal(app_handle.clone(), options).await?;
+    match result.state.as_str() {
+        "invalid_config" => {
+            emit_kernel_error_with_context(
+                &app_handle,
+                "KERNEL_CONFIG_INVALID",
+                "内核启动失败：配置校验未通过",
+                Some(&result.message),
+                Some("kernel.auto_manage"),
+                true,
+            );
+        }
+        "error" => {
+            emit_kernel_error_with_context(
+                &app_handle,
+                "KERNEL_AUTO_MANAGE_FAILED",
+                "内核自动管理失败",
+                Some(&result.message),
+                Some("kernel.auto_manage"),
+                true,
+            );
+        }
+        "missing_kernel" => {
+            emit_kernel_error_with_context(
+                &app_handle,
+                "KERNEL_BINARY_MISSING",
+                "未检测到内核文件，请先安装内核",
+                Some(&result.message),
+                Some("kernel.auto_manage"),
+                false,
+            );
+        }
+        _ => {}
+    }
     serde_json::to_value(result).map_err(|e| e.to_string())
 }

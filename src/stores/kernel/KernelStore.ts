@@ -4,6 +4,7 @@ import { APP_EVENTS } from '@/constants/events'
 import { kernelService, type KernelStatus } from '@/services/kernel-service'
 import { useAppStore, type ProxyMode } from '../app/AppStore'
 import { eventService } from '@/services/event-service'
+import type { KernelFailurePayload, KernelReadinessSnapshot, StartupDiagnosis } from '@/types/events'
 
 const DEFAULT_STATUS: KernelStatus = {
   process_running: false,
@@ -17,6 +18,14 @@ const DEFAULT_STATUS: KernelStatus = {
 export const useKernelStore = defineStore('kernel', () => {
   const appStore = useAppStore()
   const status = ref<KernelStatus>({ ...DEFAULT_STATUS })
+  const startupDiagnosis = ref<StartupDiagnosis | null>(null)
+  const readiness = ref<KernelReadinessSnapshot>({
+    config_validated: null,
+    process_spawned: null,
+    process_alive: false,
+    api_ready: false,
+    relay_ready: false,
+  })
   const lastError = ref('')
   const isLoading = ref(false)
   const isKernelInstalled = ref(false)
@@ -31,6 +40,7 @@ export const useKernelStore = defineStore('kernel', () => {
   const latestAvailableVersion = ref('')
   const availableVersions = ref<string[]>([])
   let statusUnlisten: (() => void) | null = null
+  let errorUnlisten: (() => void) | null = null
   let healthUnlisten: (() => void) | null = null
   let lastEventTime = 0
 
@@ -47,12 +57,31 @@ export const useKernelStore = defineStore('kernel', () => {
     }
 
     status.value = { ...status.value, ...next }
+    if (next.readiness) {
+      readiness.value = { ...readiness.value, ...next.readiness }
+    }
+    if (next.startup_diagnosis !== undefined) {
+      startupDiagnosis.value = next.startup_diagnosis || null
+    }
     appStore.setRunningState(next.process_running)
     if (next.version) {
       isKernelInstalled.value = true
     }
-    if (next.error) {
+    if (startupDiagnosis.value?.message) {
+      lastError.value = startupDiagnosis.value.message
+    } else if (next.startup_diagnosis === null || (next.process_running && !next.error)) {
+      lastError.value = ''
+    } else if (next.error) {
       lastError.value = next.error
+    }
+  }
+
+  const handleKernelFailureEvent = (payload: KernelFailurePayload) => {
+    if (payload.startup_diagnosis) {
+      startupDiagnosis.value = payload.startup_diagnosis
+      lastError.value = payload.startup_diagnosis.message
+    } else if (payload.message || payload.error) {
+      lastError.value = String(payload.message || payload.error || '')
     }
   }
 
@@ -85,6 +114,12 @@ export const useKernelStore = defineStore('kernel', () => {
       statusUnlisten = await kernelService.onKernelStatusChange((nextStatus) => {
         lastEventTime = Date.now()
         applyStatus(nextStatus)
+      })
+    }
+    if (!errorUnlisten) {
+      errorUnlisten = await kernelService.onKernelError((payload) => {
+        lastEventTime = Date.now()
+        handleKernelFailureEvent(payload)
       })
     }
     if (!healthUnlisten) {
@@ -245,6 +280,9 @@ export const useKernelStore = defineStore('kernel', () => {
   const isReady = computed(
     () => status.value.process_running && status.value.api_ready && status.value.websocket_ready,
   )
+  const startupDiagnosisSummary = computed(
+    () => startupDiagnosis.value?.message || startupDiagnosis.value?.detail || '',
+  )
   const isStarting = computed(() => isLoading.value && !isRunning.value)
   const isStopping = computed(() => isLoading.value && isRunning.value)
   const uptime = computed(() => {
@@ -264,16 +302,20 @@ export const useKernelStore = defineStore('kernel', () => {
 
   return {
     status,
+    startupDiagnosis,
+    readiness,
     isLoading,
     lastError,
     isKernelInstalled,
     isRunning,
     isReady,
+    startupDiagnosisSummary,
     isStarting,
     isStopping,
     uptime,
     healthStatus,
     initializeStore,
+    handleKernelFailureEvent,
     refreshStatus,
     restartKernel,
     stopKernel,

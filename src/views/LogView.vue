@@ -58,6 +58,26 @@
       </template>
     </PageHeader>
 
+    <n-card v-if="kernelStore.startupDiagnosis" size="small" class="diagnosis-card">
+      <template #header>
+        <div class="diagnosis-card-header">
+          <span>{{ kernelStore.startupDiagnosis.message }}</span>
+          <n-tag size="small" type="error">{{ kernelStore.startupDiagnosis.kind }}</n-tag>
+        </div>
+      </template>
+      <div class="diagnosis-card-body">
+        <div class="diagnosis-card-detail">{{ kernelStore.startupDiagnosis.detail }}</div>
+        <ul
+          v-if="kernelStore.startupDiagnosis.suggested_actions?.length"
+          class="diagnosis-card-actions"
+        >
+          <li v-for="action in kernelStore.startupDiagnosis.suggested_actions" :key="action">
+            {{ action }}
+          </li>
+        </ul>
+      </div>
+    </n-card>
+
     <!-- Filters -->
     <div class="filter-section">
       <div class="filter-bar">
@@ -156,7 +176,7 @@
 
 <script setup lang="ts">
 import { useLogStore } from '@/stores/kernel/LogStore'
-import { ref, computed, watch, nextTick, defineComponent, h, type Component } from 'vue'
+import { ref, computed, watch, nextTick, defineComponent, h } from 'vue'
 import { useMessage } from 'naive-ui'
 import {
   TrashOutline,
@@ -164,17 +184,12 @@ import {
   DownloadOutline,
   DocumentTextOutline,
   SearchOutline,
-  InformationCircleOutline,
-  WarningOutline,
-  AlertCircleOutline,
-  CheckmarkCircleOutline,
   ChevronUpOutline,
   ChevronDownOutline,
 } from '@vicons/ionicons5'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '@/components/common/PageHeader.vue'
-import StatusCard from '@/components/common/StatusCard.vue'
-import type { StatusCardType } from '@/types'
+import { useKernelStore } from '@/stores/kernel/KernelStore'
 
 defineOptions({
   name: 'LogView'
@@ -220,6 +235,7 @@ const HighlightText = defineComponent({
 })
 
 const logStore = useLogStore()
+const kernelStore = useKernelStore()
 const { t } = useI18n()
 const message = useMessage()
 
@@ -261,31 +277,6 @@ const logTypeCounts = computed(() => {
     counts[log.type] = (counts[log.type] || 0) + 1
   })
   return counts
-})
-
-const logStats = computed(() => {
-  const typeMap: Array<{ type: string; icon: Component; accent: StatusCardType }> = [
-    { type: 'info', icon: InformationCircleOutline, accent: 'primary' },
-    { type: 'warning', icon: WarningOutline, accent: 'warning' },
-    { type: 'error', icon: AlertCircleOutline, accent: 'error' },
-    { type: 'success', icon: CheckmarkCircleOutline, accent: 'success' },
-  ]
-
-  const stats = typeMap.map((config) => ({
-    label: getLogTypeLabel(config.type),
-    value: logTypeCounts.value[config.type] || 0,
-    icon: config.icon,
-    type: config.accent,
-  }))
-
-  stats.push({
-    label: t('log.records'),
-    value: totalLogs.value,
-    icon: DocumentTextOutline,
-    type: 'default',
-  })
-
-  return stats
 })
 
 const logTypeOptions = computed(() => {
@@ -412,6 +403,33 @@ watch(
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.diagnosis-card {
+  flex-shrink: 0;
+}
+
+.diagnosis-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.diagnosis-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diagnosis-card-detail {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diagnosis-card-actions {
+  margin: 0;
+  padding-left: 18px;
 }
 
 .filter-section {

@@ -6,7 +6,8 @@ use crate::app::core::tun_profile::TunProxyOptions;
 use crate::app::storage::state_model::AppConfig;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU16, AtomicU8, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// 内核运行状态枚举
 ///
@@ -27,6 +28,84 @@ pub enum KernelState {
     Failed = 4,
     /// 内核意外崩溃（由守护进程检测）
     Crashed = 5,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum StartupStage {
+    #[default]
+    Preflight,
+    Spawn,
+    Readiness,
+    Guard,
+    AutoManage,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StartupDiagnosisKind {
+    ConfigInvalid,
+    ConfigMissing,
+    BinaryMissing,
+    PermissionDenied,
+    SudoRequired,
+    SudoInvalid,
+    PortConflict,
+    ProcessExitedEarly,
+    ApiHttpError,
+    ApiTimeout,
+    ConflictCleanupFailed,
+    GuardRestartFailed,
+    Unknown,
+}
+
+impl StartupDiagnosisKind {
+    pub fn priority(&self) -> u8 {
+        match self {
+            StartupDiagnosisKind::ConfigMissing => 100,
+            StartupDiagnosisKind::ConfigInvalid => 90,
+            StartupDiagnosisKind::BinaryMissing => 80,
+            StartupDiagnosisKind::SudoRequired
+            | StartupDiagnosisKind::SudoInvalid
+            | StartupDiagnosisKind::PermissionDenied => 70,
+            StartupDiagnosisKind::PortConflict
+            | StartupDiagnosisKind::ConflictCleanupFailed => 60,
+            StartupDiagnosisKind::ProcessExitedEarly => 50,
+            StartupDiagnosisKind::ApiHttpError | StartupDiagnosisKind::ApiTimeout => 40,
+            StartupDiagnosisKind::GuardRestartFailed => 30,
+            StartupDiagnosisKind::Unknown => 10,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StartupDiagnosis {
+    pub attempt_id: String,
+    pub stage: StartupStage,
+    pub code: String,
+    pub kind: StartupDiagnosisKind,
+    pub message: String,
+    pub detail: String,
+    pub source: String,
+    pub recoverable: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_status: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_actions: Option<Vec<String>>,
+    pub timestamp_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct KernelReadinessSnapshot {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_validated: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_spawned: Option<bool>,
+    pub process_alive: bool,
+    pub api_ready: bool,
+    pub relay_ready: bool,
 }
 
 impl From<u8> for KernelState {
@@ -87,6 +166,9 @@ impl KernelState {
 pub struct KernelStateManager {
     state: AtomicU8,
     api_port: AtomicU16,
+    startup_diagnosis: RwLock<Option<StartupDiagnosis>>,
+    readiness: RwLock<KernelReadinessSnapshot>,
+    current_attempt_id: RwLock<Option<String>>,
 }
 
 impl KernelStateManager {
@@ -94,7 +176,40 @@ impl KernelStateManager {
         Self {
             state: AtomicU8::new(KernelState::Stopped as u8),
             api_port: AtomicU16::new(0),
+            startup_diagnosis: RwLock::new(None),
+            readiness: RwLock::new(KernelReadinessSnapshot::default()),
+            current_attempt_id: RwLock::new(None),
         }
+    }
+
+    fn now_millis() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    }
+
+    pub fn begin_attempt(&self, prefix: &str) -> String {
+        let attempt_id = format!("{}-{}", prefix, Self::now_millis());
+        if let Ok(mut guard) = self.current_attempt_id.write() {
+            *guard = Some(attempt_id.clone());
+        }
+        if let Ok(mut diagnosis) = self.startup_diagnosis.write() {
+            *diagnosis = None;
+        }
+        if let Ok(mut readiness) = self.readiness.write() {
+            *readiness = KernelReadinessSnapshot::default();
+        }
+        attempt_id
+    }
+
+    pub fn ensure_attempt(&self, prefix: &str) -> String {
+        if let Ok(guard) = self.current_attempt_id.read() {
+            if let Some(existing) = guard.clone() {
+                return existing;
+            }
+        }
+        self.begin_attempt(prefix)
     }
 
     /// 获取当前状态
@@ -133,17 +248,34 @@ impl KernelStateManager {
     pub fn mark_running(&self, api_port: u16) {
         self.api_port.store(api_port, Ordering::SeqCst);
         self.set_state(KernelState::Running);
+        self.clear_startup_diagnosis();
+        self.update_readiness(|readiness| {
+            readiness.config_validated = Some(true);
+            readiness.process_spawned = Some(true);
+            readiness.process_alive = true;
+            readiness.api_ready = true;
+        });
     }
 
     /// 标记为已停止
     pub fn mark_stopped(&self) {
         self.api_port.store(0, Ordering::SeqCst);
         self.set_state(KernelState::Stopped);
+        self.update_readiness(|readiness| {
+            readiness.process_alive = false;
+            readiness.api_ready = false;
+            readiness.relay_ready = false;
+        });
     }
 
     /// 标记为失败
     pub fn mark_failed(&self) {
         self.set_state(KernelState::Failed);
+        self.update_readiness(|readiness| {
+            readiness.process_alive = false;
+            readiness.api_ready = false;
+            readiness.relay_ready = false;
+        });
     }
 
     /// 标记为崩溃（守护进程检测）
@@ -154,6 +286,59 @@ impl KernelStateManager {
     /// 获取 API 端口
     pub fn get_api_port(&self) -> u16 {
         self.api_port.load(Ordering::SeqCst)
+    }
+
+    pub fn get_readiness(&self) -> KernelReadinessSnapshot {
+        self.readiness.read().map(|g| g.clone()).unwrap_or_default()
+    }
+
+    pub fn set_readiness(&self, readiness: KernelReadinessSnapshot) {
+        if let Ok(mut guard) = self.readiness.write() {
+            *guard = readiness;
+        }
+    }
+
+    pub fn update_readiness<F>(&self, updater: F)
+    where
+        F: FnOnce(&mut KernelReadinessSnapshot),
+    {
+        if let Ok(mut guard) = self.readiness.write() {
+            updater(&mut guard);
+        }
+    }
+
+    pub fn get_startup_diagnosis(&self) -> Option<StartupDiagnosis> {
+        self.startup_diagnosis.read().ok().and_then(|g| g.clone())
+    }
+
+    pub fn clear_startup_diagnosis(&self) {
+        if let Ok(mut guard) = self.startup_diagnosis.write() {
+            *guard = None;
+        }
+        if let Ok(mut guard) = self.current_attempt_id.write() {
+            *guard = None;
+        }
+    }
+
+    pub fn record_startup_diagnosis(&self, diagnosis: StartupDiagnosis) {
+        if let Ok(mut guard) = self.startup_diagnosis.write() {
+            match guard.as_ref() {
+                None => {
+                    *guard = Some(diagnosis)
+                }
+                Some(existing) if existing.attempt_id != diagnosis.attempt_id => {
+                    *guard = Some(diagnosis)
+                }
+                Some(existing) => {
+                    let should_replace = diagnosis.kind.priority() > existing.kind.priority()
+                        || (diagnosis.kind == existing.kind
+                            && diagnosis.detail.len() >= existing.detail.len());
+                    if should_replace {
+                        *guard = Some(diagnosis);
+                    }
+                }
+            }
+        }
     }
 }
 

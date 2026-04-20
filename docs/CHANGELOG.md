@@ -11,10 +11,13 @@
 - **URI 解析字段适配官方文档** - `tuic` 节点补齐 `congestion_control`、`udp_relay_mode`、`udp_over_stream`、`zero_rtt_handshake`、`heartbeat`、`network` 等常用参数映射；`anytls` 节点补齐 `idle_session_check_interval`、`idle_session_timeout`、`min_idle_session`，并统一写入标准 `tls.server_name` / `tls.insecure` / `tls.alpn`
 - **订阅入口提示同步更新** - 多语言文案中的 URI 支持说明补充 `tuic://`、`anytls://`，避免界面仍显示旧的协议支持范围
 - **TUN 排除路由地址前端配置（#49）** - 设置页新增 `route_exclude_address` 多行 CIDR 输入，保存前会先拦截明显无效的条目；留空时不写入该字段，继续使用后端/内核默认行为
+- **启动诊断链路结构化** - 内核状态快照新增 `startup_diagnosis` 与 `readiness`，保留原有兼容字段的同时，把启动前校验、启动后探针、自动管理与守护失败统一到同一套诊断结构里，避免继续只看到笼统的“启动失败”
+- **首页/日志页失败排查入口补齐** - 首页会直接展示最近一次启动诊断摘要与建议动作；日志页也会补充独立的启动诊断区块，即使 relay 日志尚未建立，也能查看最近一次失败详情
 
 ### 🐛 问题修复
 
 - **自启动托盘图标状态回填修复** - 开机自启并隐藏到托盘时，后端会在启动恢复与内核自动管理后主动刷新托盘运行态；系统代理/TUN 已开启时无需先打开主界面，托盘图标和菜单状态即可立即正确着色与回显
+- **内核启动失败提示可读性修复（#42）** - `kernel-error` 事件现在会附带结构化启动诊断，`KernelStore` 统一接管失败事实；托盘与首页不再只能依赖 `lastError` 字符串，`/version` 400、配置缺失/无效、权限问题等常见失败路径会保留更明确的分类和上下文
 
 ## [v2.2.9] - 2026-04-04
 

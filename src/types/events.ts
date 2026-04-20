@@ -53,10 +53,52 @@ export interface KernelHealthPayload {
   issues: string[]
 }
 
+export type StartupDiagnosisKind =
+  | 'config_invalid'
+  | 'config_missing'
+  | 'binary_missing'
+  | 'permission_denied'
+  | 'sudo_required'
+  | 'sudo_invalid'
+  | 'port_conflict'
+  | 'process_exited_early'
+  | 'api_http_error'
+  | 'api_timeout'
+  | 'conflict_cleanup_failed'
+  | 'guard_restart_failed'
+  | 'unknown'
+
+export type StartupDiagnosisStage = 'preflight' | 'spawn' | 'readiness' | 'guard' | 'auto_manage'
+
+export interface KernelReadinessSnapshot {
+  config_validated?: boolean | null
+  process_spawned?: boolean | null
+  process_alive: boolean
+  api_ready: boolean
+  relay_ready: boolean
+}
+
+export interface StartupDiagnosis {
+  attempt_id: string
+  stage: StartupDiagnosisStage
+  code: string
+  kind: StartupDiagnosisKind
+  message: string
+  detail: string
+  source: string
+  recoverable: boolean
+  config_path?: string | null
+  http_status?: number | null
+  suggested_actions?: string[] | null
+  timestamp_ms: number
+}
+
 export interface KernelLifecyclePayload {
   process_running: boolean
   api_ready: boolean
   websocket_ready: boolean
+  readiness?: KernelReadinessSnapshot
+  startup_diagnosis?: StartupDiagnosis | null
   kernel_state?: 'stopped' | 'starting' | 'running' | 'stopping' | 'failed' | 'crashed'
   state_version?: number
   proxy_mode?: 'system' | 'tun' | 'manual'
@@ -70,6 +112,7 @@ export interface KernelFailurePayload {
   message?: string
   details?: string
   source?: string
+  startup_diagnosis?: StartupDiagnosis
   recoverable?: boolean
   timestamp?: number
   // 兼容旧后端/旧前端

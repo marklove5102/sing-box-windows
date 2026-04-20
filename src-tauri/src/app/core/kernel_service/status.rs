@@ -1,6 +1,7 @@
 use crate::app::constants::paths;
 use crate::app::core::kernel_service::orchestrator::current_state_version;
 use crate::app::core::kernel_service::state::KERNEL_STATE;
+use crate::app::core::kernel_service::utils::KernelStatusPayload;
 use crate::app::core::kernel_service::PROCESS_MANAGER;
 use crate::platform;
 use crate::utils::http_client;
@@ -45,6 +46,7 @@ pub async fn kernel_get_status_enhanced(
     let port = api_port.unwrap_or(12081);
 
     let process_running = is_kernel_running().await?;
+    let mut readiness = KERNEL_STATE.get_readiness();
     let mut api_ready = false;
     let mut websocket_ready = false;
     let mut error = None;
@@ -90,6 +92,10 @@ pub async fn kernel_get_status_enhanced(
             error = Some("内核进程运行中但API服务不可用".to_string());
         }
     }
+    readiness.process_alive = process_running;
+    readiness.api_ready = api_ready;
+    readiness.relay_ready = websocket_ready;
+    KERNEL_STATE.set_readiness(readiness.clone());
 
     let mut version = if process_running {
         let client = http_client::get_client();
@@ -119,13 +125,27 @@ pub async fn kernel_get_status_enhanced(
         }
     }
 
+    let startup_diagnosis = KERNEL_STATE.get_startup_diagnosis();
+    let payload = KernelStatusPayload::new(
+        process_running,
+        api_ready,
+        websocket_ready,
+        readiness,
+        startup_diagnosis.clone(),
+    );
+
     Ok(serde_json::json!({
         "process_running": process_running,
         "api_ready": api_ready,
         "websocket_ready": websocket_ready,
         "uptime_ms": 0,
         "version": version,
-        "error": error,
+        "error": startup_diagnosis
+            .as_ref()
+            .map(|diagnosis| diagnosis.message.clone())
+            .or(error),
+        "readiness": payload.readiness,
+        "startup_diagnosis": payload.startup_diagnosis,
         "kernel_state": KERNEL_STATE.get_state().as_str(),
         "state_version": current_state_version()
     }))

@@ -245,7 +245,7 @@ onMounted(async () => {
       APP_EVENTS.kernelError,
       async (payload: KernelFailurePayload) => {
         const failure = normalizeKernelFailurePayload(payload)
-        kernelStore.lastError = failure.details || failure.userMessage
+        kernelStore.handleKernelFailureEvent(payload)
         notifyKernelFailure(failure)
 
         if (sudoPromptRunning) return
@@ -281,7 +281,14 @@ onMounted(async () => {
       APP_EVENTS.kernelOperationFailed,
       (payload: KernelOperationFailedPayload) => {
         const failure = normalizeKernelOperationFailedPayload(payload)
-        kernelStore.lastError = failure.details || failure.userMessage
+        kernelStore.handleKernelFailureEvent({
+          code: failure.code,
+          message: failure.userMessage,
+          details: failure.details,
+          source: failure.source,
+          recoverable: failure.recoverable,
+          error: failure.userMessage,
+        })
         notifyKernelFailure(failure)
       },
     )

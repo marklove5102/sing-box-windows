@@ -1,5 +1,6 @@
 use super::{ProcessError, Result};
 use crate::app::constants::{messages, paths};
+use crate::app::core::kernel_service::state::KERNEL_STATE;
 use crate::utils::proxy_util::disable_system_proxy;
 
 #[cfg(target_os = "macos")]
@@ -334,7 +335,7 @@ impl ProcessManager {
         }
 
         // 检查本实例中是否已经有进程在运行
-        let should_restart = {
+        {
             let mut process_guard = self.process.write().await;
             if let Some(ref mut proc) = *process_guard {
                 // 尝试获取进程状态，如果可以获取则说明进程还在运行
@@ -351,7 +352,6 @@ impl ProcessManager {
                                 }
                                 *process_guard = None;
                                 self.clear_managed_pid();
-                                true
                             }
                             Err(e) => {
                                 warn!("终止现有内核进程失败: {}", e);
@@ -362,7 +362,6 @@ impl ProcessManager {
                                 }
                                 *process_guard = None;
                                 self.clear_managed_pid();
-                                true
                             }
                         }
                     }
@@ -370,22 +369,14 @@ impl ProcessManager {
                         info!("发现已退出的内核进程，退出状态: {}", status);
                         *process_guard = None;
                         self.clear_managed_pid();
-                        true
                     }
                     Err(e) => {
                         warn!("检查内核进程状态失败: {}", e);
                         *process_guard = None;
                         self.clear_managed_pid();
-                        true
                     }
                 }
-            } else {
-                true
             }
-        };
-
-        if !should_restart {
-            return Ok(());
         }
 
         // 获取内核路径和配置路径
@@ -414,6 +405,10 @@ impl ProcessManager {
             {
                 Ok(child) => {
                     let child_pid = child.id();
+                    KERNEL_STATE.update_readiness(|readiness| {
+                        readiness.process_spawned = Some(true);
+                        readiness.process_alive = true;
+                    });
                     // 保存进程句柄
                     {
                         let mut process_guard = self.process.write().await;
@@ -431,6 +426,9 @@ impl ProcessManager {
                         info!("✅ 内核进程启动成功并验证通过");
                         return Ok(());
                     } else {
+                        KERNEL_STATE.update_readiness(|readiness| {
+                            readiness.process_alive = false;
+                        });
                         last_error =
                             ProcessError::StartFailed("内核进程启动后验证失败".to_string());
                         warn!("❌ 第{}次启动后验证失败", attempt);
@@ -442,6 +440,10 @@ impl ProcessManager {
                     }
                 }
                 Err(e) => {
+                    KERNEL_STATE.update_readiness(|readiness| {
+                        readiness.process_spawned = Some(false);
+                        readiness.process_alive = false;
+                    });
                     last_error = e;
                     error!("❌ 第{}次启动失败: {}", attempt, last_error);
                 }
@@ -857,6 +859,10 @@ impl ProcessManager {
     // 验证配置文件
     async fn validate_config(&self, config_path: &std::path::Path) -> Result<()> {
         if !config_path.exists() {
+            KERNEL_STATE.update_readiness(|readiness| {
+                readiness.config_validated = Some(false);
+                readiness.process_spawned = Some(false);
+            });
             return Err(ProcessError::ConfigError(format!(
                 "配置文件不存在: {}",
                 config_path.to_str().unwrap_or("unknown")
@@ -865,6 +871,10 @@ impl ProcessManager {
 
         // 检查配置文件是否可读
         if let Err(e) = tokio::fs::metadata(config_path).await {
+            KERNEL_STATE.update_readiness(|readiness| {
+                readiness.config_validated = Some(false);
+                readiness.process_spawned = Some(false);
+            });
             return Err(ProcessError::ConfigError(format!(
                 "无法访问配置文件: {}",
                 e
@@ -892,6 +902,10 @@ impl ProcessManager {
                 let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
                 let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 let detail = if !stderr.is_empty() { stderr } else { stdout };
+                KERNEL_STATE.update_readiness(|readiness| {
+                    readiness.config_validated = Some(false);
+                    readiness.process_spawned = Some(false);
+                });
 
                 if detail.contains("legacy DNS servers is deprecated")
                     || detail.contains("ENABLE_DEPRECATED_LEGACY_DNS_SERVERS")
@@ -920,6 +934,9 @@ impl ProcessManager {
             }
         }
 
+        KERNEL_STATE.update_readiness(|readiness| {
+            readiness.config_validated = Some(true);
+        });
         Ok(())
     }
 

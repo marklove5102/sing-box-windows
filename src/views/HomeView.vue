@@ -48,6 +48,29 @@
       </div>
     </div>
 
+    <n-alert
+      v-if="kernelStore.startupDiagnosis"
+      type="error"
+      class="diagnosis-alert"
+      :title="kernelStore.startupDiagnosis.message"
+    >
+      <div class="diagnosis-body">
+        <div class="diagnosis-meta">
+          <n-tag size="small" type="error">{{ kernelStore.startupDiagnosis.stage }}</n-tag>
+          <n-tag size="small">{{ kernelStore.startupDiagnosis.kind }}</n-tag>
+        </div>
+        <div class="diagnosis-detail">{{ kernelStore.startupDiagnosis.detail }}</div>
+        <ul
+          v-if="kernelStore.startupDiagnosis.suggested_actions?.length"
+          class="diagnosis-actions"
+        >
+          <li v-for="action in kernelStore.startupDiagnosis.suggested_actions" :key="action">
+            {{ action }}
+          </li>
+        </ul>
+      </div>
+    </n-alert>
+
     <!-- Main Grid -->
     <div class="dashboard-grid">
       <!-- Traffic Stats -->
@@ -258,6 +281,9 @@ const nodeProxyModes = [
   },
 ]
 
+const getKernelFailureText = (fallback: string) =>
+  kernelStore.startupDiagnosisSummary || kernelStore.lastError || fallback
+
 const syncCurrentNodeProxyMode = async () => {
   try {
     // 首页展示应以当前后端真实状态为准，而不是本地默认值。
@@ -282,7 +308,7 @@ const toggleSystemProxy = async (value: boolean) => {
     if (success) {
       message.success(t('notification.proxyModeChanged'))
     } else {
-      message.error(kernelStore.lastError || t('notification.proxyModeChangeFailed'))
+      message.error(getKernelFailureText(t('notification.proxyModeChangeFailed')))
     }
   } catch (error) {
     message.error(t('notification.proxyModeChangeFailed'))
@@ -366,7 +392,7 @@ const enableTunWithKernelRestart = async (options?: { allowSudoRetry?: boolean }
 
     // Linux/macOS：sudo 密码缺失/失效时，提示用户重新设置，并允许一次自动重试
     if (isUnixPlatform.value) {
-      const code = parseSudoCode(kernelStore.lastError)
+      const code = parseSudoCode(getKernelFailureText(''))
       if (code === 'required' || code === 'invalid') {
         message.error(
           code === 'invalid' ? t('home.sudoPassword.invalid') : t('home.sudoPassword.required'),
@@ -459,7 +485,7 @@ const restartKernel = async () => {
     if (result) {
       message.success(t('home.restartSuccess'))
     } else {
-      message.error(kernelStore.lastError || t('home.restartFailed'))
+      message.error(getKernelFailureText(t('home.restartFailed')))
     }
   } catch (error) {
     message.error(t('home.restartFailed'))
@@ -641,6 +667,32 @@ onMounted(async () => {
 .action-button {
   border-radius: 12px;
   font-weight: 600;
+}
+
+.diagnosis-alert {
+  margin-bottom: 12px;
+}
+
+.diagnosis-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diagnosis-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.diagnosis-detail {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diagnosis-actions {
+  margin: 0;
+  padding-left: 18px;
 }
 
 /* Grid */

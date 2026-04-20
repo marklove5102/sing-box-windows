@@ -7,15 +7,19 @@ import { eventService } from './event-service'
 import { invokeWithAppContext, withAppStore } from './invoke-client'
 import type {
   KernelFailurePayload,
+  KernelReadinessSnapshot,
   KernelLifecyclePayload,
   KernelOperationEventPayload,
   KernelOperationFailedPayload,
+  StartupDiagnosis,
 } from '@/types/events'
 
 export interface KernelStatus {
   process_running: boolean
   api_ready: boolean
   websocket_ready: boolean
+  readiness?: KernelReadinessSnapshot
+  startup_diagnosis?: StartupDiagnosis | null
   uptime_ms?: number
   version?: string
   error?: string

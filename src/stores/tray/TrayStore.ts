@@ -43,6 +43,9 @@ export const useTrayStore = defineStore('tray', () => {
   let lastSyncedRoute = ''
   let syncTimer: number | null = null
 
+  const getKernelFailureText = (fallback: string) =>
+    kernelStore.startupDiagnosisSummary || kernelStore.lastError || fallback
+
   const registerWatcher = (...args: Parameters<typeof watch>) => {
     const stop = watch(...args)
     trayWatchers.push(stop)
@@ -214,14 +217,12 @@ export const useTrayStore = defineStore('tray', () => {
           tun_enabled: false,
         })
         if (!applied) {
-          throw new Error(kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'))
+          throw new Error(getKernelFailureText(i18n.global.t('notification.applyProxyFailed')))
         }
 
         const success = await kernelStore.restartKernel()
         if (!success) {
-          throw new Error(
-            kernelStore.lastError || i18n.global.t('notification.kernelRestartFailed'),
-          )
+          throw new Error(getKernelFailureText(i18n.global.t('notification.kernelRestartFailed')))
         }
       } catch (error) {
         console.error('托盘关闭TUN失败:', error)
@@ -259,14 +260,12 @@ export const useTrayStore = defineStore('tray', () => {
           tun_enabled: true,
         })
         if (!applied) {
-          throw new Error(kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'))
+          throw new Error(getKernelFailureText(i18n.global.t('notification.applyProxyFailed')))
         }
 
         const success = await kernelStore.restartKernel()
         if (!success) {
-          throw new Error(
-            kernelStore.lastError || i18n.global.t('notification.kernelRestartFailed'),
-          )
+          throw new Error(getKernelFailureText(i18n.global.t('notification.kernelRestartFailed')))
         }
       } catch (error) {
         console.error('启用TUN模式失败:', error)
@@ -301,12 +300,12 @@ export const useTrayStore = defineStore('tray', () => {
           tun_enabled: true,
         })
         if (!applied) {
-          throw new Error(kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'))
+          throw new Error(getKernelFailureText(i18n.global.t('notification.applyProxyFailed')))
         }
 
         let success = await kernelStore.restartKernel()
         if (!success) {
-          const code = parseSudoCode(kernelStore.lastError)
+          const code = parseSudoCode(getKernelFailureText(''))
           if (code === 'required' || code === 'invalid') {
             appStore.showWarningMessage?.(
               code === 'invalid'
@@ -322,9 +321,7 @@ export const useTrayStore = defineStore('tray', () => {
                 tun_enabled: true,
               })
               if (!appliedRetry) {
-                throw new Error(
-                  kernelStore.lastError || i18n.global.t('notification.applyProxyFailed'),
-                )
+                throw new Error(getKernelFailureText(i18n.global.t('notification.applyProxyFailed')))
               }
               success = await kernelStore.restartKernel()
             }
@@ -332,9 +329,7 @@ export const useTrayStore = defineStore('tray', () => {
         }
 
         if (!success) {
-          throw new Error(
-            kernelStore.lastError || i18n.global.t('notification.kernelRestartFailed'),
-          )
+          throw new Error(getKernelFailureText(i18n.global.t('notification.kernelRestartFailed')))
         }
       } catch (error) {
         console.error('启用TUN模式失败:', error)
