@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-Sing-Box Windows 是一个跨平台桌面客户端，前端使用 Vue 3 + TypeScript，后端使用 Rust + Tauri 2，围绕 sing-box 内核提供订阅管理、代理模式切换、运行状态查看、托盘控制、备份恢复与应用更新等能力。
+Sing-Box Windows 是一个跨平台桌面客户端，前端使用 Vue 3 + TypeScript，后端使用 Rust + Tauri 2，围绕 sing-box 内核提供订阅管理、代理模式切换、运行状态查看、托盘控制、备份恢复与应用更新等能力。当前版本的设置页还提供了“关闭窗口行为”选项：除传统的隐藏到托盘外，还支持轻量模式，在关闭主窗口时直接销毁 `WebView` 窗口实例，仅保留托盘与后台任务，以降低后台内存占用。
 
 这份文档聚焦“当前仓库真实实现”，优先说明：
 
@@ -69,6 +69,7 @@ Sing-Box Windows 是一个跨平台桌面客户端，前端使用 Vue 3 + TypeSc
    - 绑定 Tauri event 监听
    - 初始化托盘状态与消息总线
    - 在窗口隐藏时切到 `/blank`，降低托盘驻留开销
+   - 处理托盘恢复后的待恢复路由与轻量模式重建窗口链路
 
 ### 前后端通信
 
@@ -114,6 +115,7 @@ Sing-Box Windows 是一个跨平台桌面客户端，前端使用 Vue 3 + TypeSc
   - 备份恢复
 - `tray/`
   - 后端主导的托盘菜单与窗口控制
+  - 轻量模式下的窗口销毁、重建、托盘保活与代理动作直连
 
 ### 关键页面
 
@@ -125,7 +127,7 @@ Sing-Box Windows 是一个跨平台桌面客户端，前端使用 Vue 3 + TypeSc
 - `src/views/ConnectionsView.vue`：活跃连接查看与筛选
 - `src/views/RulesView.vue`：规则命中与路由规则查看
 - `src/views/LogView.vue`：日志查看与过滤
-- `src/views/SettingView.vue`：应用设置、更新、内核、备份恢复
+- `src/views/SettingView.vue`：应用设置、更新、内核、备份恢复，以及启动设置中的“关闭窗口行为 / 轻量模式”
 - `src/views/BlankView.vue`：托盘驻留时的空白路由
 
 ## 项目结构
