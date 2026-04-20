@@ -34,7 +34,7 @@
 
 ## Overview
 
-Sing-Box Windows is a modern desktop client built around the sing-box core. It provides a cleaner workflow for importing subscriptions, switching proxy modes, inspecting runtime state, and managing desktop integration across Windows, Linux, and macOS. The current build also adds an optional lightweight tray mode in Settings: closing the main window can destroy the window instance while keeping tray controls and background tasks alive, reducing background `WebView` memory usage.
+Sing-Box Windows is a modern desktop client built around the sing-box core. It provides a cleaner workflow for importing subscriptions, switching proxy modes, inspecting runtime state, and managing desktop integration across Windows, Linux, and macOS.
 
 > Android users can also check [sing-box-windows-android](https://github.com/xinggaoya/sing-box-windows-android).
 
@@ -47,13 +47,6 @@ Sing-Box Windows is a modern desktop client built around the sing-box core. It p
 - **Desktop integration**: Tray mode, auto-start, hide-to-tray on autostart, lightweight mode (destroy the main window on close), update checks, and window state persistence.
 - **Reliability tools**: Backup/restore, subscription rollback, update channels, and self-heal restart logic.
 - **Localization**: Built-in `zh-CN`, `en-US`, `ja-JP`, and `ru-RU`.
-
-### Lightweight Tray Mode
-
-- **Entry point**: `Settings -> Startup Settings -> Close Button Behavior`, where you can choose between `Hide to Tray` and `Lightweight Mode (Destroy Window)`.
-- **Behavior**: When enabled, closing the window does not quit the app. Instead it destroys the main window while keeping the tray icon, background kernel tasks, and proxy state active. Tray actions such as System Proxy, TUN, and Restart Kernel still work.
-- **Restore flow**: Reopening from the tray rebuilds the main window and restores the most recent route.
-- **Autostart linkage**: If `Hide to Tray on Autostart` is enabled, autostart background launches also inherit the lightweight mode strategy.
 
 ## Architecture
 
