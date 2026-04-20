@@ -357,6 +357,18 @@ export default {
     kernelVersion: 'Версия ядра',
     notInstalled: 'Не установлено',
     newVersionFound: 'Найдена новая версия',
+    navigation: {
+      basics: 'Основное',
+      basicsDesc: 'Запуск, язык и внешний вид для ежедневного использования',
+      kernel: 'Ядро',
+      kernelDesc: 'Проверка, загрузка или ручной импорт ядра Sing-Box',
+      advanced: 'Сеть и расширенное',
+      advancedDesc: 'Порты прокси, IPv6, LAN, TUN и генерация конфигурации',
+      maintenance: 'Обслуживание',
+      maintenanceDesc: 'Обновления приложения, экспорт и восстановление резервных копий',
+      about: 'О программе',
+      aboutDesc: 'Информация о приложении, ядре, системе и ссылках проекта',
+    },
 
     // 通用设置
     general: {
@@ -389,6 +401,7 @@ export default {
 
     // 网络设置
     network: {
+      title: 'Сетевые настройки',
       ipv6: 'Поддержка IPv6',
       ipv4Only: 'Только IPv4',
       ipv6Enabled: 'IPv6 включен',

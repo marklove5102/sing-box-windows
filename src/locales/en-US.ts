@@ -316,6 +316,18 @@ export default {
     appVersion: 'App Version',
     notInstalled: 'Not Installed',
     newVersionFound: 'New Version Found',
+    navigation: {
+      basics: 'Basics',
+      basicsDesc: 'Startup, language, and appearance preferences for daily use',
+      kernel: 'Kernel',
+      kernelDesc: 'Inspect, download, or manually import the Sing-Box kernel',
+      advanced: 'Network & Advanced',
+      advancedDesc: 'Proxy ports, IPv6, LAN, TUN, and config generation options',
+      maintenance: 'Maintenance',
+      maintenanceDesc: 'Application updates, backup export, and restore tools',
+      about: 'About',
+      aboutDesc: 'App, kernel, system, and project link information',
+    },
     general: {
       title: 'General Settings',
       description: 'Configure language, network and other application options',
@@ -340,6 +352,7 @@ export default {
       description: 'Select application interface display language',
     },
     network: {
+      title: 'Network Settings',
       ipv6: 'IPv6 Support',
       ipv4Only: 'IPv4 Only',
       ipv6Enabled: 'IPv6 Enabled',

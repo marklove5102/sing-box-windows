@@ -349,6 +349,18 @@ export default {
     kernelVersion: 'カーネルバージョン',
     notInstalled: 'インストールされていません',
     newVersionFound: '新しいバージョンが見つかりました',
+    navigation: {
+      basics: '基本',
+      basicsDesc: '起動、言語、外観など日常的に使う設定',
+      kernel: 'カーネル',
+      kernelDesc: 'Sing-Box カーネルの確認、ダウンロード、手動インポート',
+      advanced: 'ネットワークと詳細',
+      advancedDesc: 'プロキシポート、IPv6、LAN、TUN、設定生成オプション',
+      maintenance: 'メンテナンス',
+      maintenanceDesc: 'アプリ更新、バックアップのエクスポートと復元',
+      about: '情報',
+      aboutDesc: 'アプリ、カーネル、システム、プロジェクトリンク情報',
+    },
 
     // 通用设置
     general: {
@@ -381,6 +393,7 @@ export default {
 
     // 网络设置
     network: {
+      title: 'ネットワーク設定',
       ipv6: 'IPv6 サポート',
       ipv4Only: 'IPv4 のみ',
       ipv6Enabled: 'IPv6が有効',

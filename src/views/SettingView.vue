@@ -2,751 +2,143 @@
   <div class="page-container">
     <PageHeader :title="t('setting.title')" :subtitle="t('setting.subtitle')" />
 
-    <!-- Settings Grid -->
-    <div class="settings-grid">
-      <!-- Kernel Settings -->
-      <div class="settings-section">
-        <div class="section-header">
-          <n-icon size="20"><SettingsOutline /></n-icon>
-          <h3>{{ t('setting.kernel.title') }} · {{ t('setting.kernel.advancedTag') }}</h3>
-        </div>
-        <div class="section-card">
-          <div class="alert-box info">
-            <n-icon size="18"><InformationCircleOutline /></n-icon>
-            <span>{{ t('setting.kernel.embeddedHint') }}</span>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.kernel.version') }}</div>
-              <div class="setting-desc">{{ t('setting.kernel.description') }}</div>
+    <div class="settings-shell">
+      <n-tabs v-model:value="activeTab" type="segment" animated class="settings-tabs">
+        <n-tab-pane name="basics" :tab="settingTabs.basics.label" display-directive="show:lazy">
+          <div class="settings-tab-intro">
+            <div class="tab-intro-icon">
+              <n-icon size="20"><component :is="settingTabs.basics.icon" /></n-icon>
             </div>
-            <div class="setting-action">
-              <n-tag v-if="kernelStore.hasVersionInfo()" type="success" round :bordered="false">
-                {{ formatVersion(kernelStore.getVersionString()) }}
-              </n-tag>
-              <n-tag v-else type="error" round :bordered="false">
-                {{ t('setting.notInstalled') }}
-              </n-tag>
+            <div>
+              <div class="tab-intro-title">{{ settingTabs.basics.label }}</div>
+              <div class="tab-intro-desc">{{ settingTabs.basics.description }}</div>
             </div>
           </div>
+          <SettingsBasicTab
+            :t="t"
+            :locale-store="localeStore"
+            :theme-store="themeStore"
+            :auto-start="autoStart"
+            :auto-hide-to-tray-on-autostart="autoHideToTrayOnAutostart"
+            :tray-close-behavior="trayCloseBehavior"
+            :language-options="languageOptions"
+            :tray-close-behavior-options="trayCloseBehaviorOptions"
+            :accent-presets="accentPresets"
+            :on-auto-start-change="onAutoStartChange"
+            :on-auto-hide-to-tray-on-autostart-change="onAutoHideToTrayOnAutostartChange"
+            :on-tray-close-behavior-change="onTrayCloseBehaviorChange"
+            :on-change-language="handleChangeLanguage"
+            :on-theme-mode-change="onThemeModeChange"
+            :on-accent-change="onAccentChange"
+            :select-accent-preset="selectAccentPreset"
+            :on-compact-mode-change="onCompactModeChange"
+          />
+        </n-tab-pane>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.kernel.selectVersion') }}</div>
-              <div class="setting-desc">{{ t('setting.kernel.selectVersionDesc') }}</div>
+        <n-tab-pane name="kernel" :tab="settingTabs.kernel.label" display-directive="show:lazy">
+          <div class="settings-tab-intro">
+            <div class="tab-intro-icon">
+              <n-icon size="20"><component :is="settingTabs.kernel.icon" /></n-icon>
             </div>
-            <n-select
-              v-model:value="selectedKernelVersion"
-              :options="kernelVersionOptions"
-              :loading="kernelStore.isLoading"
-              :disabled="downloading"
-              size="small"
-              class="setting-input"
-              placeholder="Latest"
-            />
-          </div>
-
-          <div v-if="hasNewVersion || !kernelStore.hasVersionInfo()" class="alert-box warning">
-            <n-icon size="18"><WarningOutline /></n-icon>
-            <span>
-              {{
-                hasNewVersion
-                  ? t('setting.update.newVersionFound', {
-                      version: kernelLatestVersion || t('setting.newVersionFound'),
-                    })
-                  : t('setting.kernel.installPrompt')
-              }}
-            </span>
-          </div>
-
-          <div v-if="downloading" class="download-box">
-            <n-progress
-              type="line"
-              :percentage="downloadProgress"
-              :processing="downloadProgress < 100"
-              indicator-placement="inside"
-            />
-            <div class="download-text">{{ downloadMessage }}</div>
-          </div>
-
-          <div class="actions-row">
-            <n-button
-              type="default"
-              @click="downloadTheKernel"
-              :loading="loading"
-              :disabled="downloading"
-              block
-              secondary
-            >
-              <template #icon
-                ><n-icon><DownloadOutline /></n-icon
-              ></template>
-              {{
-                hasNewVersion
-                  ? t('setting.kernel.update')
-                  : kernelStore.hasVersionInfo()
-                    ? t('setting.kernel.redownload')
-                    : t('setting.kernel.download')
-              }}
-            </n-button>
-            <div class="sub-actions">
-              <n-button size="small" ghost @click="showManualDownloadModal" :disabled="downloading">
-                {{ t('setting.kernel.manualDownload') }}
-              </n-button>
-              <n-button size="small" ghost @click="checkManualInstall" :disabled="downloading">
-                {{ t('setting.kernel.checkInstall') }}
-              </n-button>
+            <div>
+              <div class="tab-intro-title">{{ settingTabs.kernel.label }}</div>
+              <div class="tab-intro-desc">{{ settingTabs.kernel.description }}</div>
             </div>
           </div>
-        </div>
-      </div>
+          <SettingsKernelTab
+            :t="t"
+            :kernel-store="kernelStore"
+            :selected-kernel-version="selectedKernelVersion"
+            :kernel-version-options="kernelVersionOptions"
+            :has-new-version="hasNewVersion"
+            :kernel-latest-version="kernelLatestVersion"
+            :downloading="downloading"
+            :loading="loading"
+            :download-progress="downloadProgress"
+            :download-message="downloadMessage"
+            :on-selected-kernel-version-change="onSelectedKernelVersionChange"
+            :download-the-kernel="downloadTheKernel"
+            :show-manual-download-modal="showManualDownloadModal"
+            :check-manual-install="checkManualInstall"
+            :format-version="formatVersion"
+          />
+        </n-tab-pane>
 
-      <!-- Startup Settings -->
-      <div class="settings-section">
-        <div class="section-header">
-          <n-icon size="20"><PowerOutline /></n-icon>
-          <h3>{{ t('setting.startup.title') }}</h3>
-        </div>
-        <div class="section-card">
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.autoStart.app') }}</div>
-              <div class="setting-desc">{{ t('setting.autoStart.appDesc') }}</div>
+        <n-tab-pane name="advanced" :tab="settingTabs.advanced.label" display-directive="show:lazy">
+          <div class="settings-tab-intro">
+            <div class="tab-intro-icon">
+              <n-icon size="20"><component :is="settingTabs.advanced.icon" /></n-icon>
             </div>
-            <n-switch v-model:value="autoStart" @update:value="onAutoStartChange" />
-          </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.startup.autoHideToTrayOnAutostart') }}</div>
-              <div class="setting-desc">
-                {{ t('setting.startup.autoHideToTrayOnAutostartDesc') }}
-              </div>
-            </div>
-            <n-switch
-              v-model:value="autoHideToTrayOnAutostart"
-              @update:value="onAutoHideToTrayOnAutostartChange"
-            />
-          </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.startup.closeBehavior') }}</div>
-              <div class="setting-desc">{{ t('setting.startup.closeBehaviorDesc') }}</div>
-            </div>
-            <n-select
-              v-model:value="trayCloseBehavior"
-              :options="trayCloseBehaviorOptions"
-              size="small"
-              class="setting-input setting-input-wide"
-              @update:value="onTrayCloseBehaviorChange"
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- General Settings -->
-      <div class="settings-section">
-        <div class="section-header">
-          <n-icon size="20"><GlobeOutline /></n-icon>
-          <h3>{{ t('setting.general.title') }}</h3>
-        </div>
-        <div class="section-card">
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.language.title') }}</div>
-              <div class="setting-desc">{{ t('setting.language.description') }}</div>
-            </div>
-            <n-select
-              v-model:value="localeStore.locale"
-              :options="languageOptions"
-              size="small"
-              @update:value="handleChangeLanguage"
-              class="setting-input"
-            />
-          </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.network.ipv6') }}</div>
-              <div class="setting-desc">{{ t('setting.network.ipv6Desc') }}</div>
-            </div>
-            <n-switch v-model:value="appStore.preferIpv6" @update:value="onIpVersionChange" />
-          </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.network.ports') }}</div>
-              <div class="setting-desc">{{ t('setting.network.portsDesc') }}</div>
-            </div>
-            <n-button size="small" secondary @click="showPortSettings">
-              {{ t('setting.network.configure') }}
-            </n-button>
-          </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.network.allowLanAccess') }}</div>
-              <div class="setting-desc">{{ t('setting.network.allowLanAccessDesc') }}</div>
-            </div>
-            <n-switch :value="appStore.allowLanAccess" @update:value="onLanAccessChange" />
-          </div>
-        </div>
-      </div>
-
-      <!-- Theme Settings -->
-      <div class="settings-section">
-        <div class="section-header">
-          <n-icon size="20"><ColorPaletteOutline /></n-icon>
-          <h3>{{ t('setting.theme.title') }}</h3>
-        </div>
-        <div class="section-card theme-card">
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.theme.mode') }}</div>
-              <div class="setting-desc">{{ t('setting.theme.modeDesc') }}</div>
-            </div>
-            <n-radio-group
-              v-model:value="themeForm.mode"
-              size="small"
-              class="theme-mode-selector"
-              @update:value="onThemeModeChange"
-            >
-              <n-radio-button value="system">{{ t('setting.theme.system') }}</n-radio-button>
-              <n-radio-button value="light">{{ t('setting.theme.light') }}</n-radio-button>
-              <n-radio-button value="dark">{{ t('setting.theme.dark') }}</n-radio-button>
-            </n-radio-group>
-          </div>
-
-          <div class="setting-row align-start">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.theme.accent') }}</div>
-              <div class="setting-desc">{{ t('setting.theme.accentDesc') }}</div>
-            </div>
-            <div class="theme-accent">
-              <n-color-picker
-                v-model:value="themeForm.accentColor"
-                :modes="['hex']"
-                size="small"
-                :show-alpha="false"
-                @update:value="onAccentChange"
-              />
-              <div class="preset-swatches">
-                <button
-                  v-for="color in accentPresets"
-                  :key="color"
-                  class="preset-swatch"
-                  :style="{ background: color }"
-                  @click="selectAccentPreset(color)"
-                >
-                  <span v-if="color === themeForm.accentColor" class="swatch-active"></span>
-                </button>
-              </div>
+            <div>
+              <div class="tab-intro-title">{{ settingTabs.advanced.label }}</div>
+              <div class="tab-intro-desc">{{ settingTabs.advanced.description }}</div>
             </div>
           </div>
+          <SettingsAdvancedTab
+            :t="t"
+            :app-store="appStore"
+            :tun-stack-options="tunStackOptions"
+            :using-original-config="usingOriginalConfig"
+            :on-ip-version-change="onIpVersionChange"
+            :on-lan-access-change="onLanAccessChange"
+            :show-port-settings="showPortSettings"
+          />
+        </n-tab-pane>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.theme.compactMode') }}</div>
-              <div class="setting-desc">{{ t('setting.theme.compactDesc') }}</div>
+        <n-tab-pane name="maintenance" :tab="settingTabs.maintenance.label" display-directive="show:lazy">
+          <div class="settings-tab-intro">
+            <div class="tab-intro-icon">
+              <n-icon size="20"><component :is="settingTabs.maintenance.icon" /></n-icon>
             </div>
-            <n-switch v-model:value="themeForm.compactMode" @update:value="onCompactModeChange" />
-          </div>
-        </div>
-      </div>
-
-      <!-- Advanced Proxy Settings -->
-      <div class="settings-section full-width">
-        <div class="section-header">
-          <n-icon size="20"><OptionsOutline /></n-icon>
-          <h3>{{ t('setting.proxyAdvanced.title') }}</h3>
-        </div>
-        <div class="section-card">
-          <n-form label-placement="top" class="advanced-form">
-            <n-grid :cols="24" :x-gap="24" :y-gap="16">
-              <n-grid-item :span="24">
-                <n-form-item :label="t('setting.proxyAdvanced.systemBypass')">
-                  <n-input
-                    v-model:value="proxyAdvancedForm.systemProxyBypass"
-                    type="textarea"
-                    :rows="3"
-                    :placeholder="t('setting.proxyAdvanced.systemBypassPlaceholder')"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="24">
-                <div class="subsection-title">{{ t('setting.proxyAdvanced.tunTitle') }}</div>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.proxyAdvanced.tunMtu')">
-                  <n-input-number v-model:value="proxyAdvancedForm.tunMtu" :min="576" :max="9000" />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.proxyAdvanced.tunStack')">
-                  <n-select v-model:value="proxyAdvancedForm.tunStack" :options="tunStackOptions" />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="24">
-                <n-form-item :label="t('setting.proxyAdvanced.tunRouteExcludeAddress')">
-                  <n-input
-                    v-model:value="proxyAdvancedForm.tunRouteExcludeAddressText"
-                    type="textarea"
-                    :rows="4"
-                    :placeholder="t('setting.proxyAdvanced.tunRouteExcludeAddressPlaceholder')"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="24">
-                <div class="toggles-row">
-                  <div class="toggle-item">
-                    <span>{{ t('setting.proxyAdvanced.enableIpv6') }}</span>
-                    <n-switch v-model:value="proxyAdvancedForm.tunEnableIpv6" />
-                  </div>
-                  <div class="toggle-item">
-                    <span>{{ t('setting.proxyAdvanced.autoRoute') }}</span>
-                    <n-switch v-model:value="proxyAdvancedForm.tunAutoRoute" />
-                  </div>
-                  <div class="toggle-item">
-                    <span>{{ t('setting.proxyAdvanced.strictRoute') }}</span>
-                    <n-switch v-model:value="proxyAdvancedForm.tunStrictRoute" />
-                  </div>
-                  <div class="toggle-item">
-                    <span>{{ t('setting.proxyAdvanced.tunSelfHeal') }}</span>
-                    <n-switch v-model:value="proxyAdvancedForm.tunSelfHealEnabled" />
-                  </div>
-                </div>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.proxyAdvanced.tunSelfHealCooldown')">
-                  <n-input-number
-                    v-model:value="proxyAdvancedForm.tunSelfHealCooldownSecs"
-                    :min="15"
-                    :max="600"
-                    :disabled="!proxyAdvancedForm.tunSelfHealEnabled"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="24">
-                <n-button
-                  type="primary"
-                  block
-                  :loading="savingAdvanced"
-                  @click="saveProxyAdvancedSettings"
-                >
-                  {{ t('setting.proxyAdvanced.save') }}
-                </n-button>
-              </n-grid-item>
-            </n-grid>
-          </n-form>
-        </div>
-      </div>
-
-      <!-- sing-box 订阅配置生成（高级） -->
-      <div class="settings-section full-width">
-        <div class="section-header">
-          <n-icon size="20"><OptionsOutline /></n-icon>
-          <h3>{{ t('setting.singboxProfile.title') }}</h3>
-        </div>
-        <div class="section-card">
-          <div v-if="usingOriginalConfig" class="alert-box info">
-            <n-icon size="18"><InformationCircleOutline /></n-icon>
-            <span>{{ t('setting.singboxProfile.originalConfigHint') }}</span>
-          </div>
-          <n-form label-placement="top" class="advanced-form">
-            <n-grid :cols="24" :x-gap="24" :y-gap="16">
-              <n-grid-item :span="24">
-                <div class="subsection-title">{{ t('setting.singboxProfile.routingTitle') }}</div>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.singboxProfile.defaultOutbound')">
-                  <n-select
-                    v-model:value="singboxProfileForm.defaultProxyOutbound"
-                    :options="defaultOutboundOptions"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.singboxProfile.downloadDetour')">
-                  <n-select
-                    v-model:value="singboxProfileForm.downloadDetour"
-                    :options="downloadDetourOptions"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="24">
-                <div class="toggles-row">
-                  <div class="toggle-item">
-                    <span>{{ t('setting.singboxProfile.blockAds') }}</span>
-                    <n-switch v-model:value="singboxProfileForm.blockAds" />
-                  </div>
-                  <div class="toggle-item">
-                    <span>{{ t('setting.singboxProfile.dnsHijack') }}</span>
-                    <n-switch v-model:value="singboxProfileForm.dnsHijack" />
-                  </div>
-                  <div class="toggle-item">
-                    <span>{{ t('setting.singboxProfile.enableAppGroups') }}</span>
-                    <n-switch v-model:value="singboxProfileForm.enableAppGroups" />
-                  </div>
-                  <div class="toggle-item">
-                    <span>{{ t('setting.singboxProfile.fakeDnsEnabled') }}</span>
-                    <n-switch v-model:value="singboxProfileForm.fakeDnsEnabled" />
-                  </div>
-                </div>
-              </n-grid-item>
-
-              <n-grid-item :span="24">
-                <div class="subsection-title">{{ t('setting.singboxProfile.fakeDnsTitle') }}</div>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.singboxProfile.fakeDnsFilterMode')">
-                  <n-select
-                    v-model:value="singboxProfileForm.fakeDnsFilterMode"
-                    :options="fakeDnsFilterOptions"
-                    :disabled="!singboxProfileForm.fakeDnsEnabled"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.singboxProfile.fakeDnsIpv4Range')">
-                  <n-input
-                    v-model:value="singboxProfileForm.fakeDnsIpv4Range"
-                    placeholder="198.18.0.0/15"
-                    :disabled="!singboxProfileForm.fakeDnsEnabled"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.singboxProfile.fakeDnsIpv6Range')">
-                  <n-input
-                    v-model:value="singboxProfileForm.fakeDnsIpv6Range"
-                    placeholder="fc00::/18"
-                    :disabled="!singboxProfileForm.fakeDnsEnabled"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="24">
-                <div class="subsection-title">{{ t('setting.singboxProfile.dnsTitle') }}</div>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.singboxProfile.dnsProxy')">
-                  <n-input
-                    v-model:value="singboxProfileForm.dnsProxy"
-                    placeholder="https://1.1.1.1/dns-query"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.singboxProfile.dnsCn')">
-                  <n-input
-                    v-model:value="singboxProfileForm.dnsCn"
-                    placeholder="h3://dns.alidns.com/dns-query"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.singboxProfile.dnsResolver')">
-                  <n-input
-                    v-model:value="singboxProfileForm.dnsResolver"
-                    placeholder="114.114.114.114"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="12" :s="24" :m="12">
-                <n-form-item :label="t('setting.singboxProfile.urltestUrl')">
-                  <n-input
-                    v-model:value="singboxProfileForm.urltestUrl"
-                    placeholder="http://cp.cloudflare.com/generate_204"
-                  />
-                </n-form-item>
-              </n-grid-item>
-
-              <n-grid-item :span="24">
-                <n-button
-                  type="primary"
-                  block
-                  :loading="savingSingboxProfile"
-                  @click="saveSingboxProfileSettings"
-                >
-                  {{ t('setting.singboxProfile.save') }}
-                </n-button>
-              </n-grid-item>
-            </n-grid>
-          </n-form>
-        </div>
-      </div>
-
-      <!-- Update Settings -->
-      <div class="settings-section">
-        <div class="section-header">
-          <n-icon size="20"><RefreshOutline /></n-icon>
-          <h3>{{ t('setting.update.title') }}</h3>
-        </div>
-        <div class="section-card">
-          <div class="update-status">
-            <div class="version-info">
-              <span>{{ t('setting.update.currentVersion') }}: {{ updateStore.appVersion }}</span>
-              <n-tag
-                v-if="updateStore.hasUpdate"
-                type="warning"
-                size="small"
-                round
-                :bordered="false"
-              >
-                {{ t('setting.update.hasUpdate') }}
-              </n-tag>
-              <n-tag v-else type="success" size="small" round :bordered="false">
-                {{ t('setting.update.latest') }}
-              </n-tag>
-            </div>
-            <n-button
-              size="small"
-              secondary
-              @click="handleCheckUpdate"
-              :loading="checkingUpdate"
-              :disabled="updateStore.isChecking"
-            >
-              {{ checkingUpdate ? t('setting.update.checking') : t('setting.update.checkNow') }}
-            </n-button>
-          </div>
-
-          <div v-if="updateStore.hasUpdate" class="update-alert-card">
-            <div class="update-meta">
-              <div class="meta-box">
-                <div class="meta-label">{{ t('setting.update.newVersion') }}</div>
-                <div class="meta-value">v{{ updateStore.latestVersion }}</div>
-              </div>
-              <div class="meta-box">
-                <div class="meta-label">{{ t('setting.update.currentVersion') }}</div>
-                <div class="meta-value">v{{ updateStore.appVersion }}</div>
-              </div>
-            </div>
-
-            <div v-if="updateStore.releaseNotes" class="update-notes-preview">
-              <span class="meta-label">{{ t('setting.update.releaseNotes') }}</span>
-              <div class="notes custom-scrollbar">
-                {{ updateStore.releaseNotes }}
-              </div>
-            </div>
-
-            <div v-if="!updateStore.supportsInAppUpdate" class="update-platform-hint">
-              {{ t('setting.update.externalUpdateHint') }}
-            </div>
-
-            <div class="update-actions">
-              <n-button
-                type="primary"
-                strong
-                :loading="updateStore.supportsInAppUpdate && isUpdating"
-                :disabled="
-                  updateStore.supportsInAppUpdate ? isUpdating : !updateStore.canOpenReleasePage
-                "
-                @click="handleUpdateNow"
-              >
-                <template #icon>
-                  <n-icon>
-                    <OpenOutline v-if="!updateStore.supportsInAppUpdate" />
-                    <DownloadOutline v-else />
-                  </n-icon>
-                </template>
-                {{
-                  !updateStore.supportsInAppUpdate
-                    ? t('setting.update.openReleasePage')
-                    : updateStatus === 'installing'
-                      ? t('setting.update.installing')
-                      : isUpdating
-                        ? t('setting.update.downloading')
-                        : t('setting.update.updateNow')
-                }}
-              </n-button>
-              <n-button
-                size="small"
-                text
-                @click="handleCheckUpdate"
-                :disabled="checkingUpdate || (updateStore.supportsInAppUpdate && isUpdating)"
-              >
-                {{ t('setting.update.checkAgain') }}
-              </n-button>
-            </div>
-
-            <div
-              v-if="updateStore.supportsInAppUpdate && showUpdateProgress"
-              class="update-progress"
-            >
-              <div class="progress-header">
-                <span class="progress-text">{{
-                  updateMessage || t('setting.update.downloading')
-                }}</span>
-                <span class="progress-value">{{ updateProgress.toFixed(0) }}%</span>
-              </div>
-              <n-progress
-                type="line"
-                :percentage="updateProgress"
-                :processing="updateStatus === 'downloading'"
-                :status="updateStatus === 'error' ? 'error' : 'default'"
-                :show-indicator="false"
-              />
-            </div>
-
-            <div
-              v-else-if="updateStore.supportsInAppUpdate && updateStatus === 'error'"
-              class="update-error"
-            >
-              {{ updateMessage || t('setting.update.updateFailed') }}
+            <div>
+              <div class="tab-intro-title">{{ settingTabs.maintenance.label }}</div>
+              <div class="tab-intro-desc">{{ settingTabs.maintenance.description }}</div>
             </div>
           </div>
+          <SettingsMaintenanceTab
+            :t="t"
+            :update-store="updateStore"
+            :checking-update="checkingUpdate"
+            :update-status="updateStatus"
+            :update-progress="updateProgress"
+            :update-message="updateMessage"
+            :is-updating="isUpdating"
+            :show-update-progress="showUpdateProgress"
+            :update-channel-options="updateChannelOptions"
+            :backup-exporting="backupExporting"
+            :backup-validating="backupValidating"
+            :backup-restoring="backupRestoring"
+            :backup-busy="backupBusy"
+            :backup-preview="backupPreview"
+            :handle-update-now="handleUpdateNow"
+            :handle-check-update="handleCheckUpdate"
+            :on-auto-check-update-change="onAutoCheckUpdateChange"
+            :on-update-channel-change="onUpdateChannelChange"
+            :handle-export-backup="handleExportBackup"
+            :handle-validate-backup="handleValidateBackup"
+            :handle-restore-backup="handleRestoreBackup"
+          />
+        </n-tab-pane>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.update.autoCheck') }}</div>
+        <n-tab-pane name="about" :tab="settingTabs.about.label" display-directive="show:lazy">
+          <div class="settings-tab-intro">
+            <div class="tab-intro-icon">
+              <n-icon size="20"><component :is="settingTabs.about.icon" /></n-icon>
             </div>
-            <n-switch v-model:value="updateStore.autoCheckUpdate" />
-          </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.update.channel') }}</div>
-            </div>
-            <n-select
-              v-model:value="updateStore.updateChannel"
-              :options="updateChannelOptions"
-              size="small"
-              class="setting-input"
-              @update:value="onUpdateChannelChange"
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- Backup Settings -->
-      <div class="settings-section">
-        <div class="section-header">
-          <n-icon size="20"><ArchiveOutline /></n-icon>
-          <h3>{{ t('setting.backup.title') }}</h3>
-        </div>
-        <div class="section-card">
-          <div class="setting-row align-start">
-            <div class="setting-info">
-              <div class="setting-label">{{ t('setting.backup.description') }}</div>
-              <div class="setting-desc">{{ t('setting.backup.restoreHint') }}</div>
-            </div>
-            <div class="backup-actions">
-              <n-button
-                size="small"
-                secondary
-                :loading="backupExporting"
-                :disabled="backupBusy"
-                @click="handleExportBackup"
-              >
-                {{ t('setting.backup.exportAction') }}
-              </n-button>
-              <n-button
-                size="small"
-                secondary
-                :loading="backupValidating"
-                :disabled="backupBusy"
-                @click="handleValidateBackup"
-              >
-                {{ t('setting.backup.validateAction') }}
-              </n-button>
-              <n-button
-                size="small"
-                type="warning"
-                :loading="backupRestoring"
-                :disabled="backupBusy"
-                @click="handleRestoreBackup"
-              >
-                {{ t('setting.backup.restoreAction') }}
-              </n-button>
+            <div>
+              <div class="tab-intro-title">{{ settingTabs.about.label }}</div>
+              <div class="tab-intro-desc">{{ settingTabs.about.description }}</div>
             </div>
           </div>
-
-          <div v-if="backupPreview" class="backup-preview">
-            <div class="backup-preview-row">
-              <span class="meta-label">{{ t('setting.backup.selectedFile') }}</span>
-              <span class="backup-path">{{ backupPreview.file_path }}</span>
-            </div>
-            <div class="backup-preview-row">
-              <span class="meta-label">{{ t('setting.backup.subscriptionCount') }}</span>
-              <span class="meta-value">{{ backupPreview.subscriptions_count }}</span>
-            </div>
-            <div class="backup-preview-row" :class="{ warning: backupPreview.warnings.length > 0 }">
-              <span class="meta-label">{{ t('setting.backup.warningCount') }}</span>
-              <span class="meta-value">{{ backupPreview.warnings.length }}</span>
-            </div>
-            <div v-if="backupPreview.warnings.length > 0" class="backup-warning-list">
-              <div
-                v-for="(warning, idx) in backupPreview.warnings"
-                :key="idx"
-                class="backup-warning-item"
-              >
-                {{ warning }}
-              </div>
-            </div>
-          </div>
-          <div v-else class="setting-desc">
-            {{ t('setting.backup.noPreview') }}
-          </div>
-        </div>
-      </div>
-
-      <!-- About -->
-      <div class="settings-section">
-        <div class="section-header">
-          <n-icon size="20"><InformationCircleOutline /></n-icon>
-          <h3>{{ t('setting.about.title') }}</h3>
-        </div>
-        <div class="section-card">
-          <div class="about-list">
-            <div class="about-item">
-              <span class="label">{{ t('setting.appVersion') }}</span>
-              <span class="value">{{ updateStore.appVersion }}</span>
-            </div>
-            <div class="about-item">
-              <span class="label">{{ t('setting.kernel.version') }}</span>
-              <span class="value">{{
-                kernelStore.hasVersionInfo()
-                  ? formatVersion(kernelStore.getVersionString())
-                  : t('setting.notInstalled')
-              }}</span>
-            </div>
-            <div class="about-item">
-              <span class="label">{{ t('setting.about.system') }}</span>
-              <span class="value">{{ platformInfo?.display_name || t('common.loading') }}</span>
-            </div>
-            <div class="about-item">
-              <span class="label">{{ t('setting.about.license') }}</span>
-              <span class="value">MIT License</span>
-            </div>
-            <div class="about-actions">
-              <n-button
-                text
-                tag="a"
-                href="https://github.com/xinggaoya/sing-box-windows"
-                target="_blank"
-              >
-                <template #icon
-                  ><n-icon><LogoGithub /></n-icon
-                ></template>
-                GitHub
-              </n-button>
-            </div>
-          </div>
-        </div>
-      </div>
+          <SettingsAboutTab
+            :t="t"
+            :update-store="updateStore"
+            :kernel-store="kernelStore"
+            :platform-info="platformInfo"
+            :format-version="formatVersion"
+          />
+        </n-tab-pane>
+      </n-tabs>
     </div>
 
     <!-- Port Modal -->
@@ -816,22 +208,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, type Component } from 'vue'
 import { Window } from '@tauri-apps/api/window'
 import { useDialog, useMessage } from 'naive-ui'
 import {
   SettingsOutline,
-  WarningOutline,
   DownloadOutline,
-  OpenOutline,
   PowerOutline,
-  GlobeOutline,
   OptionsOutline,
   RefreshOutline,
   InformationCircleOutline,
-  LogoGithub,
-  ColorPaletteOutline,
-  ArchiveOutline,
 } from '@vicons/ionicons5'
 import { useI18n } from 'vue-i18n'
 import {
@@ -852,7 +238,11 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import { ACCENT_PRESETS, TUN_STACK_OPTIONS } from '@/views/setting/setting-options'
 import { useKernelDownload } from '@/views/setting/useKernelDownload'
 import { useUpdateProgressListener } from '@/views/setting/useUpdateProgressListener'
-import { useAdvancedSettingsForm } from '@/views/setting/useAdvancedSettingsForm'
+import SettingsBasicTab from '@/views/setting/components/SettingsBasicTab.vue'
+import SettingsKernelTab from '@/views/setting/components/SettingsKernelTab.vue'
+import SettingsAdvancedTab from '@/views/setting/components/SettingsAdvancedTab.vue'
+import SettingsMaintenanceTab from '@/views/setting/components/SettingsMaintenanceTab.vue'
+import SettingsAboutTab from '@/views/setting/components/SettingsAboutTab.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -864,7 +254,15 @@ const localeStore = useLocaleStore()
 const themeStore = useThemeStore()
 const subStore = useSubStore()
 
+type SettingTabKey = 'basics' | 'kernel' | 'advanced' | 'maintenance' | 'about'
+interface SettingTabMeta {
+  label: string
+  description: string
+  icon: Component
+}
+
 // State
+const activeTab = ref<SettingTabKey>('basics')
 const selectedKernelVersion = ref<string | undefined>(undefined)
 const platformInfo = ref<{ os: string; arch: string; display_name: string } | null>(null)
 
@@ -876,11 +274,6 @@ const backupExporting = ref(false)
 const backupValidating = ref(false)
 const backupRestoring = ref(false)
 const backupPreview = ref<BackupImportResult | null>(null)
-const themeForm = reactive({
-  mode: 'system' as ThemeMode,
-  accentColor: '#6366f1',
-  compactMode: false,
-})
 const accentPresets = ACCENT_PRESETS
 
 const showPortModal = ref(false)
@@ -914,6 +307,33 @@ const trayCloseBehaviorOptions = computed<{ label: string; value: TrayCloseBehav
 const tunStackOptions = TUN_STACK_OPTIONS
 
 // Computed
+const settingTabs = computed<Record<SettingTabKey, SettingTabMeta>>(() => ({
+  basics: {
+    label: t('setting.navigation.basics'),
+    description: t('setting.navigation.basicsDesc'),
+    icon: PowerOutline,
+  },
+  kernel: {
+    label: t('setting.navigation.kernel'),
+    description: t('setting.navigation.kernelDesc'),
+    icon: SettingsOutline,
+  },
+  advanced: {
+    label: t('setting.navigation.advanced'),
+    description: t('setting.navigation.advancedDesc'),
+    icon: OptionsOutline,
+  },
+  maintenance: {
+    label: t('setting.navigation.maintenance'),
+    description: t('setting.navigation.maintenanceDesc'),
+    icon: RefreshOutline,
+  },
+  about: {
+    label: t('setting.navigation.about'),
+    description: t('setting.navigation.aboutDesc'),
+    icon: InformationCircleOutline,
+  },
+}))
 const kernelLatestVersion = computed(() => kernelStore.latestAvailableVersion || '')
 const activeSubscription = computed(() => subStore.getActiveSubscription())
 const usingOriginalConfig = computed(() => activeSubscription.value?.useOriginalConfig ?? false)
@@ -958,37 +378,12 @@ const { setupUpdateProgressListener, cleanupUpdateProgressListener } = useUpdate
   t,
 })
 
-const {
-  savingAdvanced,
-  proxyAdvancedForm,
-  savingSingboxProfile,
-  singboxProfileForm,
-  defaultOutboundOptions,
-  downloadDetourOptions,
-  fakeDnsFilterOptions,
-  saveProxyAdvancedSettings,
-  saveSingboxProfileSettings,
-} = useAdvancedSettingsForm({
-  appStore,
-  message,
-  t,
-})
-
 // Methods
 const formatVersion = (v: string) => v.replace(/^v/, '')
 const isSupportedLocale = (l: string) => languageOptions.value.some((opt) => opt.value === l)
-
-const syncThemeForm = () => {
-  themeForm.mode = themeStore.mode as ThemeMode
-  themeForm.accentColor = themeStore.accentColor
-  themeForm.compactMode = themeStore.compactMode
+const onSelectedKernelVersionChange = (value: string | undefined) => {
+  selectedKernelVersion.value = value
 }
-
-watch(
-  () => [themeStore.mode, themeStore.accentColor, themeStore.compactMode],
-  () => syncThemeForm(),
-  { immediate: true },
-)
 
 watch(showManualImportModal, (visible) => {
   if (!visible) {
@@ -1083,7 +478,6 @@ const onAccentChange = async (value: string) => {
 }
 
 const selectAccentPreset = async (color: string) => {
-  themeForm.accentColor = color
   await themeStore.setAccentColor(color)
 }
 
@@ -1195,6 +589,10 @@ const handleCheckUpdate = async () => {
   } finally {
     checkingUpdate.value = false
   }
+}
+
+const onAutoCheckUpdateChange = (value: boolean) => {
+  updateStore.autoCheckUpdate = value
 }
 
 const onUpdateChannelChange = async (value: UpdateChannel) => {
@@ -1396,37 +794,94 @@ onUnmounted(() => {
   gap: var(--layout-page-gap, 24px);
 }
 
-.settings-grid {
+.settings-shell {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--layout-card-radius, 16px);
+  padding: var(--layout-card-padding, 20px);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.04);
+}
+
+.settings-tabs :deep(.n-tabs-nav) {
+  margin-bottom: 18px;
+}
+
+.settings-tabs :deep(.n-tabs-pane-wrapper) {
+  overflow: visible;
+}
+
+.settings-tab-intro {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--bg-tertiary);
+  margin-bottom: 18px;
+}
+
+.tab-intro-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+  background: rgba(59, 130, 246, 0.12);
+  flex-shrink: 0;
+}
+
+.tab-intro-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tab-intro-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+:deep(.settings-tab-panel) {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+:deep(.settings-grid) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: var(--layout-grid-gap, 24px);
 }
 
-.settings-section.full-width {
+:deep(.settings-section.full-width) {
   grid-column: 1 / -1;
 }
 
-.settings-section {
+:deep(.settings-section) {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.section-header {
+:deep(.section-header) {
   display: flex;
   align-items: center;
   gap: 10px;
   color: var(--text-secondary);
 }
 
-.section-header h3 {
+:deep(.section-header h3) {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.section-card {
+:deep(.section-card) {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: var(--layout-card-radius, 16px);
@@ -1436,65 +891,65 @@ onUnmounted(() => {
   gap: var(--layout-row-gap, 16px);
 }
 
-.setting-row {
+:deep(.setting-row) {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--layout-row-gap, 16px);
 }
 
-.setting-info {
+:deep(.setting-info) {
   flex: 1;
 }
 
-.setting-label {
+:deep(.setting-label) {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
   margin-bottom: 2px;
 }
 
-.setting-desc {
+:deep(.setting-desc) {
   font-size: 12px;
   color: var(--text-tertiary);
 }
 
-.setting-input {
+:deep(.setting-input) {
   width: 140px;
 }
 
-.setting-input-wide {
+:deep(.setting-input-wide) {
   width: 220px;
 }
 
-.setting-row.align-start {
+:deep(.setting-row.align-start) {
   align-items: flex-start;
 }
 
-.theme-card {
+:deep(.theme-card) {
   gap: 18px;
 }
 
-.theme-mode-selector {
+:deep(.theme-mode-selector) {
   display: flex;
   gap: 8px;
 }
 
-.theme-accent {
+:deep(.theme-accent) {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.preset-swatches {
+:deep(.preset-swatches) {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.preset-swatch {
+:deep(.preset-swatch) {
   width: 34px;
   height: 24px;
   border-radius: 10px;
@@ -1508,12 +963,12 @@ onUnmounted(() => {
   position: relative;
 }
 
-.preset-swatch:hover {
+:deep(.preset-swatch:hover) {
   transform: translateY(-1px);
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
 }
 
-.swatch-active {
+:deep(.swatch-active) {
   position: absolute;
   inset: 4px;
   border-radius: 8px;
@@ -1521,7 +976,7 @@ onUnmounted(() => {
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
-.alert-box {
+:deep(.alert-box) {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1530,46 +985,46 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
-.alert-box.warning {
+:deep(.alert-box.warning) {
   background: rgba(245, 158, 11, 0.1);
   color: #f59e0b;
 }
 
-.alert-box.info {
+:deep(.alert-box.info) {
   background: rgba(14, 165, 233, 0.12);
   color: #0ea5e9;
   margin-bottom: 12px;
 }
 
-.download-box {
+:deep(.download-box) {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.download-text {
+:deep(.download-text) {
   font-size: 12px;
   color: var(--text-tertiary);
   text-align: center;
 }
 
-.actions-row {
+:deep(.actions-row) {
   display: flex;
   flex-direction: column;
   gap: var(--layout-inline-gap, 12px);
 }
 
-.sub-actions {
+:deep(.sub-actions) {
   display: flex;
   gap: var(--layout-inline-gap-tight, 8px);
   justify-content: center;
 }
 
-.advanced-form {
+:deep(.advanced-form) {
   width: 100%;
 }
 
-.subsection-title {
+:deep(.subsection-title) {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -1578,7 +1033,7 @@ onUnmounted(() => {
   letter-spacing: 0.05em;
 }
 
-.toggles-row {
+:deep(.toggles-row) {
   display: flex;
   flex-wrap: wrap;
   gap: 24px;
@@ -1587,7 +1042,7 @@ onUnmounted(() => {
   border-radius: 8px;
 }
 
-.toggle-item {
+:deep(.toggle-item) {
   display: flex;
   align-items: center;
   gap: calc(var(--layout-inline-gap, 12px) - 2px);
@@ -1595,7 +1050,7 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-.update-status {
+:deep(.update-status) {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1604,7 +1059,7 @@ onUnmounted(() => {
   margin-bottom: 8px;
 }
 
-.version-info {
+:deep(.version-info) {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1612,34 +1067,34 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-.about-list {
+:deep(.about-list) {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.about-item {
+:deep(.about-item) {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
 }
 
-.about-item .label {
+:deep(.about-item .label) {
   color: var(--text-tertiary);
 }
 
-.about-item .value {
+:deep(.about-item .value) {
   color: var(--text-primary);
   font-weight: 500;
 }
 
-.about-actions {
+:deep(.about-actions) {
   margin-top: 8px;
   display: flex;
   justify-content: center;
 }
 
-.update-alert-card {
+:deep(.update-alert-card) {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1649,46 +1104,46 @@ onUnmounted(() => {
   border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
-.update-meta {
+:deep(.update-meta) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
 }
 
-.meta-box {
+:deep(.meta-box) {
   padding: 10px 12px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.meta-label {
+:deep(.meta-label) {
   display: block;
   font-size: 12px;
   color: var(--text-tertiary);
   margin-bottom: 6px;
 }
 
-.meta-value {
+:deep(.meta-value) {
   font-weight: 700;
   color: var(--text-primary);
   font-size: 16px;
 }
 
-.update-actions {
+:deep(.update-actions) {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.update-notes-preview {
+:deep(.update-notes-preview) {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.update-notes-preview .notes {
+:deep(.update-notes-preview .notes) {
   max-height: 120px;
   overflow: auto;
   padding: 10px;
@@ -1699,7 +1154,7 @@ onUnmounted(() => {
   line-height: 1.5;
 }
 
-.update-platform-hint {
+:deep(.update-platform-hint) {
   padding: 10px 12px;
   border-radius: 10px;
   background: rgba(99, 102, 241, 0.08);
@@ -1709,13 +1164,13 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
-.update-progress {
+:deep(.update-progress) {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.progress-header {
+:deep(.progress-header) {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1723,24 +1178,24 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-.progress-value {
+:deep(.progress-value) {
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.update-error {
+:deep(.update-error) {
   font-size: 13px;
   color: #ef4444;
 }
 
-.backup-actions {
+:deep(.backup-actions) {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-width: 160px;
 }
 
-.backup-preview {
+:deep(.backup-preview) {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1750,18 +1205,18 @@ onUnmounted(() => {
   background: var(--bg-tertiary);
 }
 
-.backup-preview-row {
+:deep(.backup-preview-row) {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.backup-preview-row.warning .meta-value {
+:deep(.backup-preview-row.warning .meta-value) {
   color: #f59e0b;
 }
 
-.backup-path {
+:deep(.backup-path) {
   flex: 1;
   text-align: right;
   font-size: 12px;
@@ -1769,14 +1224,14 @@ onUnmounted(() => {
   word-break: break-all;
 }
 
-.backup-warning-list {
+:deep(.backup-warning-list) {
   margin-top: 4px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.backup-warning-item {
+:deep(.backup-warning-item) {
   font-size: 12px;
   color: #f59e0b;
   line-height: 1.5;
@@ -1841,8 +1296,22 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .settings-grid {
+  .settings-shell {
+    padding: 14px;
+  }
+
+  :deep(.settings-grid) {
     grid-template-columns: 1fr;
+  }
+
+  :deep(.setting-row) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  :deep(.setting-input),
+  :deep(.setting-input-wide) {
+    width: 100%;
   }
 }
 </style>

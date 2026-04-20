@@ -313,6 +313,18 @@ export default {
     appVersion: '应用版本',
     notInstalled: '未安装',
     newVersionFound: '发现新版本',
+    navigation: {
+      basics: '基础',
+      basicsDesc: '启动、语言和外观偏好，适合日常使用调整',
+      kernel: '内核',
+      kernelDesc: '查看、下载或手动导入 Sing-Box 内核',
+      advanced: '网络与高级',
+      advancedDesc: '代理端口、IPv6、LAN、TUN 与配置生成高级选项',
+      maintenance: '维护',
+      maintenanceDesc: '应用更新、备份导出和恢复工具',
+      about: '关于',
+      aboutDesc: '查看应用、内核、系统与项目链接信息',
+    },
     general: {
       title: '常规设置',
       description: '配置语言、网络和其他应用程序选项',
@@ -337,6 +349,7 @@ export default {
       description: '选择应用程序界面显示语言',
     },
     network: {
+      title: '网络设置',
       ipv6: 'IPv6 支持',
       ipv4Only: '仅使用 IPv4',
       ipv6Enabled: 'IPv6 已启用',
