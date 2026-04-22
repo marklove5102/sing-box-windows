@@ -40,12 +40,13 @@ Sing-Box Windows is a modern desktop client built around the sing-box core. It p
 
 ## Features
 
-- **Subscription import**: Supports sing-box JSON, Clash/Mihomo YAML, and URI list input.
+- **Subscription import**: Supports sing-box JSON, Clash/Mihomo YAML, and URI list input (including `tuic://` and `anytls://`).
 - **Proxy modes**: Switch between system proxy, TUN mode, and manual mode.
 - **Runtime visibility**: Monitor traffic, active connections, rules, and logs in real time.
 - **Kernel management**: Built-in kernel resource pipeline, version download, and manual kernel import.
 - **Desktop integration**: Tray mode, auto-start, hide-to-tray on autostart, lightweight mode (destroy the main window on close), update checks, and window state persistence.
-- **Reliability tools**: Backup/restore, subscription rollback, update channels, and self-heal restart logic.
+- **Reliability tools**: Backup/restore, subscription rollback, update channels, self-heal restart logic, and structured startup diagnostics with actionable failure hints.
+- **Settings navigation**: Tabbed settings grouped by use case (basic preferences, kernel, network/advanced, maintenance, about).
 - **Localization**: Built-in `zh-CN`, `en-US`, `ja-JP`, and `ru-RU`.
 
 ## Architecture
@@ -62,9 +63,9 @@ Sing-Box Windows is a modern desktop client built around the sing-box core. It p
 | --- | --- | --- |
 | sing-box JSON | Raw JSON config | Parses top-level `outbounds` |
 | Clash / Mihomo YAML | YAML subscription | Parses `proxies` and converts supported nodes |
-| URI list | `vmess://`, `vless://`, `trojan://`, `ss://`, `hysteria2://` | Supports one or multiple nodes |
+| URI list | `vmess://`, `vless://`, `trojan://`, `ss://`, `hysteria2://`, `tuic://`, `anytls://` | Supports one or multiple nodes |
 
-Supported node types currently include `vless`, `vmess`, `trojan`, `shadowsocks`, `shadowsocksr`, `socks`, `http`, and `hysteria2`.
+Supported node types currently include `vless`, `vmess`, `trojan`, `shadowsocks`, `shadowsocksr`, `socks`, `http`, `hysteria2`, `tuic`, and `anytls`.
 
 ## Quick Start
 
